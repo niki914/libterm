@@ -3,12 +3,11 @@ package com.niki914.libterm.testing
 import com.niki914.libterm.BackendStartResult
 import com.niki914.libterm.Clock
 import com.niki914.libterm.OutputChunk
-import com.niki914.libterm.SessionState
 import com.niki914.libterm.TerminalBackend
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 
@@ -18,7 +17,7 @@ class FakeBackend(
 ) : TerminalBackend {
     private val outputEvents = Channel<OutputChunk>(capacity = Channel.UNLIMITED)
     private val recordedWrites = mutableListOf<String>()
-    private val recordedStates = mutableListOf<SessionState>()
+    private val exitResult = CompletableDeferred<TerminalFailure?>()
 
     private var startFailure: TerminalFailure? = null
     private var closeGate: CompletableDeferred<Unit>? = null
@@ -28,9 +27,6 @@ class FakeBackend(
 
     val writes: List<String>
         get() = recordedWrites
-
-    val stateHistory: List<SessionState>
-        get() = recordedStates
 
     var closeCallCount: Int = 0
         private set
@@ -69,6 +65,8 @@ class FakeBackend(
         gate?.await()
     }
 
+    override suspend fun awaitExit(): TerminalFailure? = exitResult.await()
+
     fun emitOutput(chunk: OutputChunk): Boolean = outputEvents.trySend(chunk).isSuccess
 
     fun emitStdout(text: String): Boolean {
@@ -99,10 +97,6 @@ class FakeBackend(
         startFailure = null
     }
 
-    fun moveTo(state: SessionState) {
-        recordedStates += state
-    }
-
     fun holdCloseUntilCompleted() {
         shouldHoldClose = true
         val gate = closeGate
@@ -114,5 +108,19 @@ class FakeBackend(
     fun completeClose() {
         shouldHoldClose = false
         closeGate?.complete(Unit)
+    }
+
+    fun finishNormally() {
+        completeExit(null)
+    }
+
+    fun terminateWithFailure(failure: TerminalFailure) {
+        completeExit(failure)
+    }
+
+    private fun completeExit(result: TerminalFailure?) {
+        if (!exitResult.isCompleted) {
+            exitResult.complete(result)
+        }
     }
 }

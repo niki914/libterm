@@ -11,4 +11,6 @@ interface TerminalBackend {
     suspend fun send(input: String)
 
     suspend fun close()
+
+    suspend fun awaitExit(): TerminalFailure?
 }

@@ -2,7 +2,6 @@ package com.niki914.libterm.testing
 
 import com.niki914.libterm.BackendStartResult
 import com.niki914.libterm.OutputChunk
-import com.niki914.libterm.SessionState
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -17,7 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
-import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -131,17 +130,28 @@ class FakeBackendTest {
     }
 
     @Test
-    fun `move to records explicit state history for assertions`() {
+    fun `await exit resumes with configured terminal result`() = runTest {
         val backend = FakeBackend(identity = TerminalIdentity.ROOT)
+        val awaiting = backgroundScope.async { backend.awaitExit() }
+        runCurrent()
 
-        backend.moveTo(SessionState.Starting)
-        backend.moveTo(SessionState.Running)
-        backend.moveTo(SessionState.Closed)
+        assertFalse(awaiting.isCompleted)
+        backend.finishNormally()
+        advanceUntilIdle()
 
-        assertEquals(
-            listOf(SessionState.Starting, SessionState.Running, SessionState.Closed),
-            backend.stateHistory,
+        assertNull(awaiting.await())
+
+        val failure = TerminalFailure.RuntimeTerminated(
+            identity = TerminalIdentity.ROOT,
+            message = "session crashed",
         )
+        val failedBackend = FakeBackend(identity = TerminalIdentity.ROOT)
+        val failedAwaiting = backgroundScope.async { failedBackend.awaitExit() }
+        runCurrent()
+        failedBackend.terminateWithFailure(failure)
+        advanceUntilIdle()
+
+        assertEquals(failure, failedAwaiting.await())
     }
 
     @Test

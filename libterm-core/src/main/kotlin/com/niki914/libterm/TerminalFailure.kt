@@ -20,6 +20,12 @@ sealed interface TerminalFailure {
         val cause: Throwable? = null,
     ) : TerminalFailure
 
+    data class RuntimeTerminated(
+        override val identity: TerminalIdentity,
+        override val message: String? = null,
+        val cause: Throwable? = null,
+    ) : TerminalFailure
+
     data class AlreadyClosed(
         override val identity: TerminalIdentity? = null,
         override val message: String? = null,
