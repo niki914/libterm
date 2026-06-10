@@ -146,7 +146,16 @@ class TerminalSession(
             )
         }
 
-        backend.send(input)
+        try {
+            backend.send(input)
+        } catch (error: Throwable) {
+            if (error is CancellationException) {
+                throw error
+            }
+            val failure = runtimeFailure(error)
+            applyOutputFailure(failure)
+            return failure
+        }
         return null
     }
 
@@ -220,6 +229,7 @@ class TerminalSession(
                         if (error is CancellationException) {
                             throw error
                         }
+                        applyOutputFailure(runtimeFailure(error), cancelOutputJob = false)
                     }
                 }
             }
@@ -263,6 +273,32 @@ class TerminalSession(
             _state.value = resolvedState
             outputCollectionJob?.cancel()
             outputCollectionJob = null
+            completeIfNeeded(startDeferred, resolvedState)
+            completeIfNeeded(closeDeferred, resolvedState)
+            resolvedState
+        }
+    }
+
+    private fun applyOutputFailure(
+        failure: TerminalFailure,
+        cancelOutputJob: Boolean = true,
+    ): SessionState {
+        return synchronized(lifecycleLock) {
+            val resolvedState = when (val existingState = _state.value) {
+                is SessionState.Failed -> existingState
+                SessionState.Closed -> existingState
+                SessionState.Starting,
+                SessionState.Running,
+                -> SessionState.Failed(failure)
+            }
+
+            _state.value = resolvedState
+            if (cancelOutputJob) {
+                outputCollectionJob?.cancel()
+            }
+            outputCollectionJob = null
+            exitAwaitJob?.cancel()
+            exitAwaitJob = null
             completeIfNeeded(startDeferred, resolvedState)
             completeIfNeeded(closeDeferred, resolvedState)
             resolvedState

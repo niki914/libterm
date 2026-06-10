@@ -9,6 +9,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -144,6 +145,25 @@ class TerminalSessionTest {
     }
 
     @Test
+    fun `send backend exception returns runtime terminated failure`() = runTest {
+        val backend = ThrowingSendBackend(identity = TerminalIdentity.ROOT)
+        val session = createSession(
+            backend = backend,
+            clock = FakeClock(),
+            scheduler = testScheduler,
+        )
+
+        assertEquals(SessionState.Running, session.start())
+
+        val failure = assertIs<TerminalFailure.RuntimeTerminated>(session.send("id\n"))
+        assertEquals(TerminalIdentity.ROOT, failure.identity)
+        assertEquals("send failed", failure.message)
+        assertEquals(SessionState.Failed(failure), session.currentState)
+
+        backend.finishNormally()
+    }
+
+    @Test
     fun `close before start is a no-op and does not block later start`() = runTest {
         val backend = FakeBackend(identity = TerminalIdentity.USER)
         val session = createSession(
@@ -232,6 +252,27 @@ class TerminalSessionTest {
         assertEquals("await exit failed", failure.message)
         assertEquals(SessionState.Failed(failure), session.currentState)
     }
+
+    @Test
+    fun `output flow exception moves session to failed`() = runTest {
+        val backend = ThrowingOutputBackend(identity = TerminalIdentity.USER)
+        val session = createSession(
+            backend = backend,
+            clock = FakeClock(),
+            scheduler = testScheduler,
+        )
+
+        assertEquals(SessionState.Running, session.start())
+
+        backend.failOutputCollection()
+        advanceUntilIdle()
+
+        val failed = assertIs<SessionState.Failed>(session.currentState)
+        val failure = assertIs<TerminalFailure.RuntimeTerminated>(failed.failure)
+        assertEquals(TerminalIdentity.USER, failure.identity)
+        assertEquals("output failed", failure.message)
+    }
+
 
     @Test
     fun `concurrent output keeps deterministic buffer invariants`() = runTest {
@@ -328,6 +369,56 @@ class TerminalSessionTest {
 
         override suspend fun awaitExit(): TerminalFailure? {
             throw IllegalStateException("await exit failed")
+        }
+    }
+
+    private class ThrowingSendBackend(
+        override val identity: TerminalIdentity,
+    ) : TerminalBackend {
+        private val exitResult = CompletableDeferred<TerminalFailure?>()
+
+        override val output: Flow<OutputChunk> = emptyFlow()
+
+        override suspend fun start(): BackendStartResult = BackendStartResult.Started
+
+        override suspend fun send(input: String) {
+            throw IllegalStateException("send failed")
+        }
+
+        override suspend fun close() = Unit
+
+        override suspend fun awaitExit(): TerminalFailure? = exitResult.await()
+
+        fun finishNormally() {
+            if (!exitResult.isCompleted) {
+                exitResult.complete(null)
+            }
+        }
+    }
+
+    private class ThrowingOutputBackend(
+        override val identity: TerminalIdentity,
+    ) : TerminalBackend {
+        private val outputFailure = CompletableDeferred<Unit>()
+        private val exitResult = CompletableDeferred<TerminalFailure?>()
+
+        override val output: Flow<OutputChunk> = flow {
+            outputFailure.await()
+            throw IllegalStateException("output failed")
+        }
+
+        override suspend fun start(): BackendStartResult = BackendStartResult.Started
+
+        override suspend fun send(input: String) = Unit
+
+        override suspend fun close() = Unit
+
+        override suspend fun awaitExit(): TerminalFailure? = exitResult.await()
+
+        fun failOutputCollection() {
+            if (!outputFailure.isCompleted) {
+                outputFailure.complete(Unit)
+            }
         }
     }
 }
