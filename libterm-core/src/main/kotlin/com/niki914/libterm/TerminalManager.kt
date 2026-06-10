@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 
 class TerminalManager(
     private val privilegeProvider: PrivilegeProvider,
+    private val privilegeAuthorizer: PrivilegeAuthorizer? = null,
     private val idGenerator: IdGenerator,
     private val clock: Clock,
     private val scope: CoroutineScope,
@@ -14,10 +15,17 @@ class TerminalManager(
     private val registryLock = Any()
     private val sessionsById = LinkedHashMap<String, TerminalSession>()
 
-    suspend fun open(identity: TerminalIdentity): OpenResult<TerminalSession> {
+    suspend fun open(
+        identity: TerminalIdentity,
+        authorizationMode: AuthorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
+    ): OpenResult<TerminalSession> {
         return when (val availability = privilegeProvider.getAvailability(identity)) {
             is BackendAvailability.Unavailable -> OpenResult.Failure(availability.failure)
-            is BackendAvailability.Unauthorized -> OpenResult.Failure(availability.failure)
+            is BackendAvailability.Unauthorized -> handleUnauthorized(
+                identity = identity,
+                authorizationMode = authorizationMode,
+                failure = availability.failure,
+            )
             BackendAvailability.Available -> openAvailableSession(identity)
         }
     }
@@ -44,6 +52,24 @@ class TerminalManager(
     fun list(): List<TerminalSession> {
         return synchronized(registryLock) {
             sessionsById.values.toList()
+        }
+    }
+
+    private suspend fun handleUnauthorized(
+        identity: TerminalIdentity,
+        authorizationMode: AuthorizationMode,
+        failure: TerminalFailure,
+    ): OpenResult<TerminalSession> {
+        if (authorizationMode == AuthorizationMode.CHECK_ONLY) {
+            return OpenResult.Failure(failure)
+        }
+        val authorizer = privilegeAuthorizer ?: return OpenResult.Failure(failure)
+
+        return when (val result = authorizer.requestAuthorization(identity)) {
+            AuthorizationResult.Granted -> openAvailableSession(identity)
+            is AuthorizationResult.Denied -> OpenResult.Failure(result.failure)
+            is AuthorizationResult.Unavailable -> OpenResult.Failure(result.failure)
+            is AuthorizationResult.Failed -> OpenResult.Failure(result.failure)
         }
     }
 

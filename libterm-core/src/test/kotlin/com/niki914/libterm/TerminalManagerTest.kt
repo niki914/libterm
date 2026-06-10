@@ -1,6 +1,7 @@
 package com.niki914.libterm
 
 import com.niki914.libterm.testing.FakeBackend
+import com.niki914.libterm.testing.FakeAuthorizer
 import com.niki914.libterm.testing.FakeClock
 import com.niki914.libterm.testing.FakeProvider
 import com.niki914.libterm.testing.SequentialIdGenerator
@@ -68,7 +69,10 @@ class TerminalManagerTest {
         val fixture = createFixture()
         fixture.provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
 
-        val result = fixture.manager.open(TerminalIdentity.SHIZUKU)
+        val result = fixture.manager.open(
+            identity = TerminalIdentity.SHIZUKU,
+            authorizationMode = AuthorizationMode.CHECK_ONLY,
+        )
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertEquals(
@@ -80,6 +84,87 @@ class TerminalManagerTest {
         )
         assertTrue(fixture.requestedIdentities.isEmpty())
         assertTrue(fixture.manager.list().isEmpty())
+    }
+
+    @Test
+    fun `open check only does not request authorization`() = runTest {
+        val fixture = createFixture()
+        fixture.provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
+
+        val result = fixture.manager.open(
+            identity = TerminalIdentity.SHIZUKU,
+            authorizationMode = AuthorizationMode.CHECK_ONLY,
+        )
+
+        val failure = assertIs<OpenResult.Failure>(result)
+        assertEquals(
+            TerminalFailure.AuthorizationDenied(
+                identity = TerminalIdentity.SHIZUKU,
+                message = "permission denied",
+            ),
+            failure.failure,
+        )
+        assertTrue(fixture.authorizer.requestedIdentities.isEmpty())
+        assertTrue(fixture.requestedIdentities.isEmpty())
+    }
+
+    @Test
+    fun `open defaults to request authorization and opens after grant`() = runTest {
+        val fixture = createFixture()
+        fixture.provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
+        fixture.authorizer.setGranted(TerminalIdentity.SHIZUKU)
+
+        val result = fixture.manager.open(TerminalIdentity.SHIZUKU)
+
+        val session = assertSuccess(result)
+        assertEquals(TerminalIdentity.SHIZUKU, session.identity)
+        assertEquals(listOf(TerminalIdentity.SHIZUKU), fixture.authorizer.requestedIdentities)
+        assertEquals(listOf(TerminalIdentity.SHIZUKU), fixture.requestedIdentities)
+
+        fixture.finishAllBackends()
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `open request if needed returns denied result without creating session`() = runTest {
+        val fixture = createFixture()
+        fixture.provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
+        fixture.authorizer.setDenied(TerminalIdentity.SHIZUKU, message = "user denied")
+
+        val result = fixture.manager.open(
+            identity = TerminalIdentity.SHIZUKU,
+            authorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
+        )
+
+        val failure = assertIs<OpenResult.Failure>(result)
+        assertEquals(
+            TerminalFailure.AuthorizationDenied(
+                identity = TerminalIdentity.SHIZUKU,
+                message = "user denied",
+            ),
+            failure.failure,
+        )
+        assertEquals(listOf(TerminalIdentity.SHIZUKU), fixture.authorizer.requestedIdentities)
+        assertTrue(fixture.requestedIdentities.isEmpty())
+        assertTrue(fixture.manager.list().isEmpty())
+    }
+
+    @Test
+    fun `open available does not request authorization`() = runTest {
+        val fixture = createFixture()
+        fixture.provider.setAvailable(TerminalIdentity.SHIZUKU)
+
+        val result = fixture.manager.open(
+            identity = TerminalIdentity.SHIZUKU,
+            authorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
+        )
+
+        assertSuccess(result)
+        assertTrue(fixture.authorizer.requestedIdentities.isEmpty())
+        assertEquals(listOf(TerminalIdentity.SHIZUKU), fixture.requestedIdentities)
+
+        fixture.finishAllBackends()
+        advanceUntilIdle()
     }
 
     @Test
@@ -227,11 +312,13 @@ class TerminalManagerTest {
         backendFactory: ((TerminalIdentity, FakeClock) -> FakeBackend)? = null,
     ): ManagerFixture {
         val provider = FakeProvider()
+        val authorizer = FakeAuthorizer()
         val clock = FakeClock()
         val requestedIdentities = mutableListOf<TerminalIdentity>()
         val createdBackends = mutableListOf<FakeBackend>()
         val manager = TerminalManager(
             privilegeProvider = provider,
+            privilegeAuthorizer = authorizer,
             idGenerator = SequentialIdGenerator(),
             clock = clock,
             scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
@@ -246,6 +333,7 @@ class TerminalManagerTest {
         )
         return ManagerFixture(
             provider = provider,
+            authorizer = authorizer,
             requestedIdentities = requestedIdentities,
             createdBackends = createdBackends,
             manager = manager,
@@ -254,6 +342,7 @@ class TerminalManagerTest {
 
     private class ManagerFixture(
         val provider: FakeProvider,
+        val authorizer: FakeAuthorizer,
         val requestedIdentities: MutableList<TerminalIdentity>,
         private val createdBackends: MutableList<FakeBackend>,
         val manager: TerminalManager,

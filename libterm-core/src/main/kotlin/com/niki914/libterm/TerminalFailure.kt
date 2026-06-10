@@ -14,6 +14,12 @@ sealed interface TerminalFailure {
         override val message: String? = null,
     ) : TerminalFailure
 
+    data class AuthorizationFailed(
+        override val identity: TerminalIdentity,
+        override val message: String? = null,
+        val cause: Throwable? = null,
+    ) : TerminalFailure
+
     data class StartupFailed(
         override val identity: TerminalIdentity,
         override val message: String? = null,
