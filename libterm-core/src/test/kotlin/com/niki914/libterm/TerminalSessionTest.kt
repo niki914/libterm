@@ -35,6 +35,7 @@ class TerminalSessionTest {
 
         assertEquals(SessionState.Running, state)
         assertEquals(SessionState.Running, session.currentState)
+        assertEquals("session-test", session.id)
         assertEquals(1, backend.startCallCount)
 
         backend.finishNormally()
@@ -272,6 +273,7 @@ class TerminalSessionTest {
         scheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
     ): TerminalSession {
         return TerminalSession(
+            id = "session-test",
             backend = backend,
             clock = clock,
             bufferConfig = bufferConfig,

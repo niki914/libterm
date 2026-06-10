@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class TerminalSession(
+    val id: String,
     private val backend: TerminalBackend,
     private val clock: Clock,
     private val bufferConfig: TerminalBufferConfig = TerminalBufferConfig(),
