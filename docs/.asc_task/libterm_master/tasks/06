@@ -1,0 +1,53 @@
+Use Skill: asc-director
+
+You are working in:
+`/Users/bytedance/repo/android/personal/cmd-android-reborn`
+
+Task ID:
+A06_libterm_backend_shizuku
+
+Read these files first:
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/libterm_master/master.md`
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/libterm_master/tasks/A06_libterm_backend_shizuku.md`
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/terminal_kit/tech_survey.md`
+- Source under `ServiceManagerCompat-main`
+- Existing A01 contract docs and code, if present.
+
+Goal:
+Create the Shizuku backend by copying and modifying the relevant ServiceManagerCompat Binder/UserService channel.
+
+Important interpretation:
+ServiceManagerCompat is not a terminal library. Use only its elevated Binder/UserService process channel ideas. Do not expose system service/Binder APIs to LibTerm core.
+
+Scope:
+- Copy needed ServiceManagerCompat pieces into the Shizuku backend module.
+- Keep Android Binder, Shizuku, hidden API stubs inside this backend module only.
+- Create a Shizuku `TerminalBackend` implementation.
+- Create a Shizuku `PrivilegeProvider`.
+- Wrap remote execution/output into LibTerm streaming abstractions.
+- Ensure core sees only `TerminalBackend`, `PrivilegeProvider`, `OutputChunk`, and result types.
+
+Non-goals:
+- Do not expose `IBinder` or `IServiceManager` in core API.
+- Do not build a system service control SDK.
+- Do not implement automatic fallback.
+- Do not modify ServiceManagerCompat-main in place unless explicitly required; prefer copying into the new backend.
+
+Skills:
+- First invoke `asc-director`.
+- Use `Karpathy Guidelines`.
+- Use `diagnose` only after static analysis cannot explain runtime failure.
+
+Testing requirements:
+- JVM/local tests: adapter state mapping, error mapping, no Android leakage into core.
+- Instrumentation/device tests: Shizuku availability, permission, bind UserService, remote execution smoke, unbind/close.
+- Include negative cases: Shizuku not installed/running, permission denied, bind failure, remote service died.
+
+Acceptance criteria:
+- Shizuku backend implements A01 contract.
+- Core has zero Android Binder dependency.
+- ServiceManagerCompat code is reduced or isolated to what LibTerm needs.
+- Clear failure results are returned.
+- Resource cleanup is explicit.
+- Provide changed files and suggested local + device verification commands.
+- Do not run full build or device tests unless user explicitly approves.

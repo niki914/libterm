@@ -1,0 +1,58 @@
+Use Skill: asc-director
+
+You are working in:
+`/Users/bytedance/repo/android/personal/cmd-android-reborn`
+
+Task ID:
+A02_libterm_core_session
+
+Read these files first:
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/libterm_master/master.md`
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/libterm_master/tasks/A02_libterm_core_session.md`
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/libterm_master/tasks/A04_libterm_test_fixtures.md`
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/terminal_kit/tech_survey.md`
+- Existing A01 contract docs and code, if present.
+
+Goal:
+Implement `TerminalSession`, the core stateful object representing one terminal window.
+
+Scope:
+- Bind one `TerminalBackend`.
+- Collect backend streaming output.
+- Maintain an in-memory bounded output ring buffer.
+- Expose latest output access, active input sending, close behavior, and state observation.
+- Keep all logic pure Kotlin/JVM.
+
+Non-goals:
+- No disk persistence.
+- No command history.
+- No PTY.
+- No reliable `WAITING_INPUT` state.
+- No Android dependency.
+
+Skills:
+- First invoke `asc-director`.
+- Use `tdd` if implementation starts, because session buffering/state behavior is easy to regress.
+- Use `Karpathy Guidelines` before implementation.
+
+Testing requirements:
+Write JVM unit tests using fake backend behavior.
+Cover at least:
+- empty output
+- stdout output
+- stderr output
+- output exceeding buffer capacity
+- `latest(n)` edge cases: n=0, n larger than buffer, n smaller than buffer
+- `send(input)` forwards exact input
+- `close()` is idempotent
+- output after close is ignored or handled according to documented behavior
+- backend failure updates session state
+
+Acceptance criteria:
+- `TerminalSession` has no Android dependency.
+- Output buffer is bounded and deterministic.
+- `send()` is a thin pass-through to backend write.
+- `close()` releases backend once.
+- Tests exercise real session behavior, not only mocked method calls.
+- Provide changed files and suggested focused test command.
+- Do not run full build unless user explicitly approves.

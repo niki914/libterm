@@ -1,0 +1,60 @@
+Use Skill: asc-director
+
+You are working in:
+`/Users/bytedance/repo/android/personal/cmd-android-reborn`
+
+Task ID:
+A01_libterm_contract
+
+Read these files first:
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/libterm_master/master.md`
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/libterm_master/progress.md`
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/libterm_master/tasks/A01_libterm_contract.md`
+- `/Users/bytedance/repo/android/personal/cmd-android-reborn/docs/.asc_task/terminal_kit/tech_survey.md`
+
+Goal:
+Define and implement the stable public contract for LibTerm core.
+
+Required package:
+`com.niki914.libterm`
+
+Scope:
+Implement the minimal contract in the pure JVM core module:
+- `TerminalIdentity`
+- `SessionState`
+- `OutputChunk`
+- `OpenResult`
+- `TerminalBackend`
+- `PrivilegeProvider`
+- `Clock`
+- `IdGenerator`
+- Any minimal error/failure model required for `open()` and backend startup
+
+Design rules:
+- `libterm-core` must be pure Kotlin/JVM.
+- No Android SDK type is allowed in core.
+- No `IBinder`, `Context`, `Intent`, `Parcel`, `Handler`, or Android annotations in core.
+- `open()` must be able to return explicit failure. Do not design automatic fallback.
+- The contract must support streaming output and active input.
+- Do not add persistence or command history.
+
+Skills:
+- First invoke `asc-director`.
+- Use `Karpathy Guidelines` before implementation.
+
+Expected ASC output:
+- Create small ASC docs under `docs/.asc_task/libterm_contract/`.
+- Produce `tech_survey.md`, `tech_design.md`, `plan.md`, and `progress.md`.
+- Implement only the core contract.
+
+Acceptance criteria:
+- Core contract compiles as pure JVM Kotlin.
+- All public types live under `com.niki914.libterm`.
+- The model can represent:
+  - user/root/shizuku identity
+  - starting/running/closed/failed states
+  - stdout/stderr output chunks
+  - open success/failure without fallback
+  - backend availability/authorization/start failure
+- Provide a short API overview and suggested test/compile commands.
+- Do not run full build unless user explicitly approves.
