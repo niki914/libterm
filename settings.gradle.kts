@@ -36,4 +36,5 @@ include(
     ":libterm-backend-libsu",
     ":libterm-backend-shizuku",
     ":libterm-runtime",
+    ":shell-smoke-app",
 )
