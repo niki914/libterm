@@ -34,9 +34,13 @@ android {
 }
 
 dependencies {
+    implementation(project(":libterm-core"))
     implementation(libs.androidx.annotation)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.libsu.core)
+
+    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 afterEvaluate {
