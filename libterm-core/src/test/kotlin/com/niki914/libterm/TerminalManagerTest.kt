@@ -205,12 +205,12 @@ class TerminalManagerTest {
         runCurrent()
         assertFalse(firstBackend === secondBackend)
 
-        firstBackend.emitStdout("first")
-        secondBackend.emitStdout("second")
+        firstBackend.emitStdout(bytesOf("first"))
+        secondBackend.emitStdout(bytesOf("second"))
         advanceUntilIdle()
 
-        assertEquals(listOf("first"), first.latest(limit = 10).map { it.text })
-        assertEquals(listOf("second"), second.latest(limit = 10).map { it.text })
+        assertEquals(listOf(bytesOf("first")), first.latest(limit = 10).map { it.bytes })
+        assertEquals(listOf(bytesOf("second")), second.latest(limit = 10).map { it.bytes })
 
         fixture.finishAllBackends()
         advanceUntilIdle()
@@ -219,6 +219,8 @@ class TerminalManagerTest {
     private fun assertSuccess(result: OpenResult<TerminalSession>): TerminalSession {
         return assertIs<OpenResult.Success<TerminalSession>>(result).value
     }
+
+    private fun bytesOf(text: String): TerminalBytes = TerminalBytes.of(text.encodeToByteArray())
 
     private fun TestScope.createFixture(
         bufferConfig: TerminalBufferConfig = TerminalBufferConfig(),

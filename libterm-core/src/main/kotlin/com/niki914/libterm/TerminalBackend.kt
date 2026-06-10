@@ -8,7 +8,7 @@ interface TerminalBackend {
 
     suspend fun start(): BackendStartResult
 
-    suspend fun send(input: String)
+    suspend fun send(input: TerminalBytes): SendResult
 
     suspend fun close()
 

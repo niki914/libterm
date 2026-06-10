@@ -25,7 +25,7 @@ class TerminalSession(
 
     private val _state = MutableStateFlow<SessionState>(SessionState.Closed)
 
-    private var totalBufferedChars: Int = 0
+    private var totalBufferedBytes: Int = 0
     private var startDeferred: CompletableDeferred<SessionState>? = null
     private var closeDeferred: CompletableDeferred<SessionState>? = null
     private var outputCollectionJob: Job? = null
@@ -138,25 +138,35 @@ class TerminalSession(
         }
     }
 
-    suspend fun send(input: String): TerminalFailure? {
+    suspend fun send(input: TerminalBytes): SendResult {
         if (currentState != SessionState.Running) {
-            return TerminalFailure.AlreadyClosed(
-                identity = identity,
-                message = "Session is not running",
+            return SendResult.Failed(
+                TerminalFailure.AlreadyClosed(
+                    identity = identity,
+                    message = "Session is not running",
+                ),
             )
         }
 
-        try {
-            backend.send(input)
+        return try {
+            backend.send(input).also { result ->
+                val failure = (result as? SendResult.Failed)?.failure
+                if (failure is TerminalFailure.RuntimeTerminated) {
+                    applyOutputFailure(failure)
+                }
+            }
         } catch (error: Throwable) {
             if (error is CancellationException) {
                 throw error
             }
             val failure = runtimeFailure(error)
             applyOutputFailure(failure)
-            return failure
+            SendResult.Failed(failure)
         }
-        return null
+    }
+
+    suspend fun send(bytes: ByteArray): SendResult {
+        return send(TerminalBytes.of(bytes))
     }
 
     suspend fun close(): SessionState {
@@ -246,17 +256,17 @@ class TerminalSession(
     private fun appendChunk(chunk: OutputChunk) {
         synchronized(bufferLock) {
             buffer += chunk
-            totalBufferedChars += chunk.text.length
+            totalBufferedBytes += chunk.bytes.size
             trimBufferLocked()
         }
     }
 
     private fun trimBufferLocked() {
         while (buffer.size > bufferConfig.maxChunkCount ||
-            (totalBufferedChars > bufferConfig.maxCharCount && buffer.size > 1)
+            (totalBufferedBytes > bufferConfig.maxByteCount && buffer.size > 1)
         ) {
             val removed = buffer.removeAt(0)
-            totalBufferedChars -= removed.text.length
+            totalBufferedBytes -= removed.bytes.size
         }
     }
 

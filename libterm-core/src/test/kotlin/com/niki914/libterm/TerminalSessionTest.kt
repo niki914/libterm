@@ -64,29 +64,29 @@ class TerminalSessionTest {
     }
 
     @Test
-    fun `latest trims old chunks by chunk count and char count`() = runTest {
+    fun `latest trims old chunks by chunk count and byte count`() = runTest {
         val backend = FakeBackend(identity = TerminalIdentity.USER)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
             bufferConfig = TerminalBufferConfig(
                 maxChunkCount = 3,
-                maxCharCount = 4,
+                maxByteCount = 4,
             ),
             scheduler = testScheduler,
         )
 
         session.start()
         runCurrent()
-        backend.emitStdout("a")
-        backend.emitStdout("b")
-        backend.emitStdout("c")
-        backend.emitStdout("wxyz")
+        backend.emitStdout(bytesOf("a"))
+        backend.emitStdout(bytesOf("b"))
+        backend.emitStdout(bytesOf("c"))
+        backend.emitStdout(bytesOf("wxyz"))
         advanceUntilIdle()
 
         assertEquals(
             listOf(
-                OutputChunk(text = "wxyz", isStderr = false, timestampMillis = 0L),
+                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("wxyz"), timestampMillis = 0L),
             ),
             session.latest(limit = 10),
         )
@@ -106,15 +106,52 @@ class TerminalSessionTest {
 
         session.start()
         runCurrent()
-        backend.emitStdout("out")
+        backend.emitStdout(bytesOf("out"))
         clock.advanceBy(5L)
-        backend.emitStderr("err")
+        backend.emitStderr(bytesOf("err"))
         advanceUntilIdle()
 
         val latest = session.latest(limit = 2)
         assertEquals(2, latest.size)
-        assertEquals(OutputChunk(text = "out", isStderr = false, timestampMillis = 10L), latest[0])
-        assertEquals(OutputChunk(text = "err", isStderr = true, timestampMillis = 15L), latest[1])
+        assertEquals(OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("out"), timestampMillis = 10L), latest[0])
+        assertEquals(OutputChunk(stream = OutputStream.STDERR, bytes = bytesOf("err"), timestampMillis = 15L), latest[1])
+
+        backend.finishNormally()
+    }
+
+    @Test
+    fun `send forwards TerminalBytes`() = runTest {
+        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val session = createSession(
+            backend = backend,
+            clock = FakeClock(),
+            scheduler = testScheduler,
+        )
+        val input = bytesOf("id\n")
+
+        assertEquals(SessionState.Running, session.start())
+
+        assertEquals(SendResult.Sent, session.send(input))
+        assertEquals(listOf(input), backend.writes)
+
+        backend.finishNormally()
+    }
+
+    @Test
+    fun `send byte array convenience wraps copy`() = runTest {
+        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val session = createSession(
+            backend = backend,
+            clock = FakeClock(),
+            scheduler = testScheduler,
+        )
+        val input = byteArrayOf(1, 2, 3)
+
+        assertEquals(SessionState.Running, session.start())
+        assertEquals(SendResult.Sent, session.send(input))
+        input[0] = 9
+
+        assertEquals(listOf(TerminalBytes.of(byteArrayOf(1, 2, 3))), backend.writes)
 
         backend.finishNormally()
     }
@@ -138,7 +175,8 @@ class TerminalSessionTest {
         assertEquals(SessionState.Closed, session.currentState)
         assertEquals(1, backend.closeCallCount)
 
-        val failure = assertIs<TerminalFailure.AlreadyClosed>(session.send("id\n"))
+        val failed = assertIs<SendResult.Failed>(session.send(bytesOf("id\n")))
+        val failure = assertIs<TerminalFailure.AlreadyClosed>(failed.failure)
         assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
         assertEquals("Session is not running", failure.message)
         assertTrue(backend.writes.isEmpty())
@@ -155,9 +193,34 @@ class TerminalSessionTest {
 
         assertEquals(SessionState.Running, session.start())
 
-        val failure = assertIs<TerminalFailure.RuntimeTerminated>(session.send("id\n"))
+        val failed = assertIs<SendResult.Failed>(session.send(bytesOf("id\n")))
+        val failure = assertIs<TerminalFailure.RuntimeTerminated>(failed.failure)
         assertEquals(TerminalIdentity.ROOT, failure.identity)
         assertEquals("send failed", failure.message)
+        assertEquals(SessionState.Failed(failure), session.currentState)
+
+        backend.finishNormally()
+    }
+
+    @Test
+    fun `send backend failed result moves session to failed`() = runTest {
+        val failure = TerminalFailure.RuntimeTerminated(
+            identity = TerminalIdentity.ROOT,
+            message = "write failed",
+        )
+        val backend = FailedSendBackend(
+            identity = TerminalIdentity.ROOT,
+            failure = failure,
+        )
+        val session = createSession(
+            backend = backend,
+            clock = FakeClock(),
+            scheduler = testScheduler,
+        )
+
+        assertEquals(SessionState.Running, session.start())
+
+        assertEquals(SendResult.Failed(failure), session.send(bytesOf("id\n")))
         assertEquals(SessionState.Failed(failure), session.currentState)
 
         backend.finishNormally()
@@ -282,27 +345,27 @@ class TerminalSessionTest {
             clock = FakeClock(),
             bufferConfig = TerminalBufferConfig(
                 maxChunkCount = 5,
-                maxCharCount = 5,
+                maxByteCount = 5,
             ),
             scheduler = testScheduler,
         )
-        val emitted = ('a'..'t').map(Char::toString).toSet()
+        val emitted = ('a'..'t').map { bytesOf(it.toString()) }.toSet()
 
         session.start()
         runCurrent()
         ('a'..'t').forEach { value ->
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-                backend.emitStdout(value.toString())
+                backend.emitStdout(bytesOf(value.toString()))
             }
         }
         advanceUntilIdle()
 
         val latest = session.latest(limit = 100)
         assertEquals(5, latest.size)
-        assertEquals(5, latest.sumOf { it.text.length })
-        assertTrue(latest.all { !it.isStderr })
-        assertTrue(latest.all { it.text in emitted })
-        assertEquals(latest.map { it.text }.toSet().size, latest.size)
+        assertEquals(5, latest.sumOf { it.bytes.size })
+        assertTrue(latest.all { it.stream == OutputStream.STDOUT })
+        assertTrue(latest.all { it.bytes in emitted })
+        assertEquals(latest.map { it.bytes }.toSet().size, latest.size)
 
         backend.finishNormally()
     }
@@ -335,7 +398,7 @@ class TerminalSessionTest {
 
         override suspend fun start(): BackendStartResult = startResult.await()
 
-        override suspend fun send(input: String) = Unit
+        override suspend fun send(input: TerminalBytes): SendResult = SendResult.Sent
 
         override suspend fun close() {
             closeCallCount += 1
@@ -363,7 +426,7 @@ class TerminalSessionTest {
 
         override suspend fun start(): BackendStartResult = BackendStartResult.Started
 
-        override suspend fun send(input: String) = Unit
+        override suspend fun send(input: TerminalBytes): SendResult = SendResult.Sent
 
         override suspend fun close() = Unit
 
@@ -381,9 +444,32 @@ class TerminalSessionTest {
 
         override suspend fun start(): BackendStartResult = BackendStartResult.Started
 
-        override suspend fun send(input: String) {
+        override suspend fun send(input: TerminalBytes): SendResult {
             throw IllegalStateException("send failed")
         }
+
+        override suspend fun close() = Unit
+
+        override suspend fun awaitExit(): TerminalFailure? = exitResult.await()
+
+        fun finishNormally() {
+            if (!exitResult.isCompleted) {
+                exitResult.complete(null)
+            }
+        }
+    }
+
+    private class FailedSendBackend(
+        override val identity: TerminalIdentity,
+        private val failure: TerminalFailure,
+    ) : TerminalBackend {
+        private val exitResult = CompletableDeferred<TerminalFailure?>()
+
+        override val output: Flow<OutputChunk> = emptyFlow()
+
+        override suspend fun start(): BackendStartResult = BackendStartResult.Started
+
+        override suspend fun send(input: TerminalBytes): SendResult = SendResult.Failed(failure)
 
         override suspend fun close() = Unit
 
@@ -409,7 +495,7 @@ class TerminalSessionTest {
 
         override suspend fun start(): BackendStartResult = BackendStartResult.Started
 
-        override suspend fun send(input: String) = Unit
+        override suspend fun send(input: TerminalBytes): SendResult = SendResult.Sent
 
         override suspend fun close() = Unit
 
@@ -421,4 +507,6 @@ class TerminalSessionTest {
             }
         }
     }
+
+    private fun bytesOf(text: String): TerminalBytes = TerminalBytes.of(text.encodeToByteArray())
 }

@@ -3,6 +3,9 @@ package com.niki914.libterm.backend.libsu
 import com.niki914.libterm.BackendStartResult
 import com.niki914.libterm.Clock
 import com.niki914.libterm.OutputChunk
+import com.niki914.libterm.OutputStream
+import com.niki914.libterm.SendResult
+import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -75,16 +78,16 @@ class LibsuTerminalBackendTest {
 
         runCurrent()
         assertEquals(BackendStartResult.Started, backend.start())
-        session.emitStdout("hello")
+        session.emitStdout(bytesOf("hello"))
         clock.advanceBy(5L)
-        session.emitStderr("oops")
+        session.emitStderr(bytesOf("oops"))
         advanceUntilIdle()
         backend.close()
 
         assertEquals(
             listOf(
-                OutputChunk(text = "hello", isStderr = false, timestampMillis = 100L),
-                OutputChunk(text = "oops", isStderr = true, timestampMillis = 105L),
+                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("hello"), timestampMillis = 100L),
+                OutputChunk(stream = OutputStream.STDERR, bytes = bytesOf("oops"), timestampMillis = 105L),
             ),
             collecting.await(),
         )
@@ -99,11 +102,79 @@ class LibsuTerminalBackendTest {
         )
 
         assertEquals(BackendStartResult.Started, backend.start())
-        backend.send("id")
-        backend.send("pwd\n")
+        assertEquals(SendResult.Sent, backend.send(bytesOf("id")))
+        assertEquals(SendResult.Sent, backend.send(bytesOf("pwd\n")))
         backend.close()
 
-        assertEquals(listOf("id", "pwd\n"), session.writes)
+        assertEquals(listOf(bytesOf("id"), bytesOf("pwd\n")), session.writes)
+    }
+
+    @Test
+    fun `non utf8 bytes are preserved`() = runTest {
+        val session = FakeLibsuShellSession()
+        val backend = createBackend(
+            identity = TerminalIdentity.USER,
+            adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
+        )
+        val nonUtf8 = TerminalBytes.of(byteArrayOf(0xC3.toByte()))
+        val collecting = backgroundScope.async(UnconfinedTestDispatcher(testScheduler)) {
+            backend.output.take(1).toList()
+        }
+
+        runCurrent()
+        assertEquals(BackendStartResult.Started, backend.start())
+        session.emitStdout(nonUtf8)
+        advanceUntilIdle()
+        backend.close()
+
+        assertEquals(
+            listOf(OutputChunk(stream = OutputStream.STDOUT, bytes = nonUtf8, timestampMillis = 0L)),
+            collecting.await(),
+        )
+    }
+
+    @Test
+    fun `ansi escape bytes are preserved`() = runTest {
+        val session = FakeLibsuShellSession()
+        val backend = createBackend(
+            identity = TerminalIdentity.USER,
+            adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
+        )
+        val ansi = TerminalBytes.of(byteArrayOf(0x1B, 0x5B, 0x33, 0x31, 0x6D))
+        val collecting = backgroundScope.async(UnconfinedTestDispatcher(testScheduler)) {
+            backend.output.take(1).toList()
+        }
+
+        runCurrent()
+        assertEquals(BackendStartResult.Started, backend.start())
+        session.emitStderr(ansi)
+        advanceUntilIdle()
+        backend.close()
+
+        assertEquals(
+            listOf(OutputChunk(stream = OutputStream.STDERR, bytes = ansi, timestampMillis = 0L)),
+            collecting.await(),
+        )
+    }
+
+    @Test
+    fun `write failure maps to SendResult Failed`() = runTest {
+        val failure = TerminalFailure.RuntimeTerminated(
+            identity = TerminalIdentity.USER,
+            message = "write failed",
+        )
+        val session = FakeLibsuShellSession().apply {
+            failWritesWith(failure)
+        }
+        val backend = createBackend(
+            identity = TerminalIdentity.USER,
+            adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
+        )
+
+        assertEquals(BackendStartResult.Started, backend.start())
+
+        val failed = assertIs<SendResult.Failed>(backend.send(bytesOf("id")))
+        assertEquals(failure, failed.failure)
     }
 
     @Test
@@ -153,6 +224,8 @@ class LibsuTerminalBackendTest {
         )
     }
 
+    private fun bytesOf(text: String): TerminalBytes = TerminalBytes.of(text.encodeToByteArray())
+
     private class FakeClock(initialMillis: Long = 0L) : Clock {
         private var currentMillis: Long = initialMillis
 
@@ -186,12 +259,16 @@ class LibsuTerminalBackendTest {
 
         override val output = outputEvents
 
-        val writes = mutableListOf<String>()
+        val writes = mutableListOf<TerminalBytes>()
+        private var writeFailure: TerminalFailure? = null
+
         var closeCallCount: Int = 0
             private set
 
-        override suspend fun write(input: String) {
+        override suspend fun write(input: TerminalBytes): SendResult {
+            writeFailure?.let { return SendResult.Failed(it) }
             writes += input
+            return SendResult.Sent
         }
 
         override suspend fun close() {
@@ -200,12 +277,16 @@ class LibsuTerminalBackendTest {
 
         override suspend fun awaitExit(): TerminalFailure? = exitFailure
 
-        suspend fun emitStdout(text: String) {
-            outputEvents.emit(LibsuOutputEvent.Stdout(text))
+        fun failWritesWith(failure: TerminalFailure) {
+            writeFailure = failure
         }
 
-        suspend fun emitStderr(text: String) {
-            outputEvents.emit(LibsuOutputEvent.Stderr(text))
+        suspend fun emitStdout(bytes: TerminalBytes) {
+            outputEvents.emit(LibsuOutputEvent.Stdout(bytes))
+        }
+
+        suspend fun emitStderr(bytes: TerminalBytes) {
+            outputEvents.emit(LibsuOutputEvent.Stderr(bytes))
         }
     }
 }

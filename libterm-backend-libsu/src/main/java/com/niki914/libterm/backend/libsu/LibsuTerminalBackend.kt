@@ -3,7 +3,10 @@ package com.niki914.libterm.backend.libsu
 import com.niki914.libterm.BackendStartResult
 import com.niki914.libterm.Clock
 import com.niki914.libterm.OutputChunk
+import com.niki914.libterm.OutputStream
+import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBackend
+import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import kotlinx.coroutines.CancellationException
@@ -89,11 +92,16 @@ class LibsuTerminalBackend(
         }
     }
 
-    override suspend fun send(input: String) {
+    override suspend fun send(input: TerminalBytes): SendResult {
         val currentSession = lifecycleMutex.withLock {
-            session ?: throw IllegalStateException("libsu backend has not been started")
+            session ?: return@withLock null
         }
-        currentSession.write(input)
+        return currentSession?.write(input) ?: SendResult.Failed(
+            TerminalFailure.AlreadyClosed(
+                identity = identity,
+                message = "libsu backend has not been started",
+            ),
+        )
     }
 
     override suspend fun close() {
@@ -140,14 +148,14 @@ class LibsuTerminalBackend(
     private fun LibsuOutputEvent.toOutputChunk(): OutputChunk {
         return when (this) {
             is LibsuOutputEvent.Stdout -> OutputChunk(
-                text = text,
-                isStderr = false,
+                stream = OutputStream.STDOUT,
+                bytes = bytes,
                 timestampMillis = clock.nowMillis(),
             )
 
             is LibsuOutputEvent.Stderr -> OutputChunk(
-                text = text,
-                isStderr = true,
+                stream = OutputStream.STDERR,
+                bytes = bytes,
                 timestampMillis = clock.nowMillis(),
             )
         }

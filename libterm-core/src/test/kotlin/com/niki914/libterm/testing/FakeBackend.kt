@@ -3,7 +3,10 @@ package com.niki914.libterm.testing
 import com.niki914.libterm.BackendStartResult
 import com.niki914.libterm.Clock
 import com.niki914.libterm.OutputChunk
+import com.niki914.libterm.OutputStream
+import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBackend
+import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import kotlinx.coroutines.CompletableDeferred
@@ -16,7 +19,7 @@ class FakeBackend(
     private val clock: Clock = FakeClock(),
 ) : TerminalBackend {
     private val outputEvents = Channel<OutputChunk>(capacity = Channel.UNLIMITED)
-    private val recordedWrites = mutableListOf<String>()
+    private val recordedWrites = mutableListOf<TerminalBytes>()
     private val exitResult = CompletableDeferred<TerminalFailure?>()
 
     private var startFailure: TerminalFailure? = null
@@ -25,7 +28,7 @@ class FakeBackend(
 
     override val output: Flow<OutputChunk> = outputEvents.receiveAsFlow()
 
-    val writes: List<String>
+    val writes: List<TerminalBytes>
         get() = recordedWrites
 
     var closeCallCount: Int = 0
@@ -47,9 +50,10 @@ class FakeBackend(
         }
     }
 
-    override suspend fun send(input: String) {
+    override suspend fun send(input: TerminalBytes): SendResult {
         check(!isClosed) { "FakeBackend is closed" }
         recordedWrites += input
+        return SendResult.Sent
     }
 
     override suspend fun close() {
@@ -69,25 +73,29 @@ class FakeBackend(
 
     fun emitOutput(chunk: OutputChunk): Boolean = outputEvents.trySend(chunk).isSuccess
 
-    fun emitStdout(text: String): Boolean {
+    fun emitStdout(bytes: TerminalBytes): Boolean {
         return emitOutput(
             OutputChunk(
-                text = text,
-                isStderr = false,
+                stream = OutputStream.STDOUT,
+                bytes = bytes,
                 timestampMillis = clock.nowMillis(),
             ),
         )
     }
 
-    fun emitStderr(text: String): Boolean {
+    fun emitStderr(bytes: TerminalBytes): Boolean {
         return emitOutput(
             OutputChunk(
-                text = text,
-                isStderr = true,
+                stream = OutputStream.STDERR,
+                bytes = bytes,
                 timestampMillis = clock.nowMillis(),
             ),
         )
     }
+
+    fun emitStdout(bytes: ByteArray): Boolean = emitStdout(TerminalBytes.of(bytes))
+
+    fun emitStderr(bytes: ByteArray): Boolean = emitStderr(TerminalBytes.of(bytes))
 
     fun failOnStart(failure: TerminalFailure) {
         startFailure = failure

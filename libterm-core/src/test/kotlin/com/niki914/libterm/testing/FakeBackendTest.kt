@@ -2,6 +2,9 @@ package com.niki914.libterm.testing
 
 import com.niki914.libterm.BackendStartResult
 import com.niki914.libterm.OutputChunk
+import com.niki914.libterm.OutputStream
+import com.niki914.libterm.SendResult
+import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,7 +26,7 @@ import kotlin.test.assertTrue
 class FakeBackendTest {
 
     @Test
-    fun `emit output keeps order stderr marker and clock timestamp`() = runTest {
+    fun `emit output keeps order stream and clock timestamp`() = runTest {
         val clock = FakeClock(initialMillis = 100L)
         val backend = FakeBackend(identity = TerminalIdentity.USER, clock = clock)
         val outputs = mutableListOf<OutputChunk>()
@@ -33,15 +36,15 @@ class FakeBackendTest {
         }
         runCurrent()
 
-        assertTrue(backend.emitStdout("hello"))
+        assertTrue(backend.emitStdout(bytesOf("hello")))
         clock.advanceBy(5L)
-        assertTrue(backend.emitStderr("oops"))
+        assertTrue(backend.emitStderr(bytesOf("oops")))
         clock.advanceBy(7L)
         assertTrue(
             backend.emitOutput(
                 OutputChunk(
-                    text = "done",
-                    isStderr = false,
+                    stream = OutputStream.STDOUT,
+                    bytes = bytesOf("done"),
                     timestampMillis = clock.nowMillis(),
                 ),
             ),
@@ -51,9 +54,9 @@ class FakeBackendTest {
 
         assertEquals(
             listOf(
-                OutputChunk(text = "hello", isStderr = false, timestampMillis = 100L),
-                OutputChunk(text = "oops", isStderr = true, timestampMillis = 105L),
-                OutputChunk(text = "done", isStderr = false, timestampMillis = 112L),
+                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("hello"), timestampMillis = 100L),
+                OutputChunk(stream = OutputStream.STDERR, bytes = bytesOf("oops"), timestampMillis = 105L),
+                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("done"), timestampMillis = 112L),
             ),
             outputs,
         )
@@ -63,8 +66,8 @@ class FakeBackendTest {
     fun `emit before collect is preserved for later subscriber`() = runTest {
         val backend = FakeBackend(identity = TerminalIdentity.USER)
 
-        assertTrue(backend.emitStdout("queued-1"))
-        assertTrue(backend.emitStderr("queued-2"))
+        assertTrue(backend.emitStdout(bytesOf("queued-1")))
+        assertTrue(backend.emitStderr(bytesOf("queued-2")))
 
         val collector = backgroundScope.async(UnconfinedTestDispatcher(testScheduler)) {
             backend.output.take(2).toList()
@@ -74,8 +77,8 @@ class FakeBackendTest {
 
         assertEquals(
             listOf(
-                OutputChunk(text = "queued-1", isStderr = false, timestampMillis = 0L),
-                OutputChunk(text = "queued-2", isStderr = true, timestampMillis = 0L),
+                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("queued-1"), timestampMillis = 0L),
+                OutputChunk(stream = OutputStream.STDERR, bytes = bytesOf("queued-2"), timestampMillis = 0L),
             ),
             collector.await(),
         )
@@ -86,12 +89,24 @@ class FakeBackendTest {
         val backend = FakeBackend(identity = TerminalIdentity.ROOT)
 
         val result = backend.start()
-        backend.send("pwd\n")
-        backend.send("exit\n")
+        assertEquals(SendResult.Sent, backend.send(bytesOf("pwd\n")))
+        assertEquals(SendResult.Sent, backend.send(bytesOf("exit\n")))
 
         assertEquals(BackendStartResult.Started, result)
         assertEquals(1, backend.startCallCount)
-        assertEquals(listOf("pwd\n", "exit\n"), backend.writes)
+        assertEquals(listOf(bytesOf("pwd\n"), bytesOf("exit\n")), backend.writes)
+    }
+
+    @Test
+    fun `emit preserves non utf8 bytes`() = runTest {
+        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val nonUtf8 = TerminalBytes.of(byteArrayOf(0xC3.toByte()))
+
+        assertTrue(backend.emitStdout(nonUtf8))
+
+        val emitted = backend.output.take(1).toList().single()
+        assertEquals(OutputStream.STDOUT, emitted.stream)
+        assertEquals(nonUtf8, emitted.bytes)
     }
 
     @Test
@@ -123,7 +138,7 @@ class FakeBackendTest {
         assertTrue(backend.isClosed)
 
         val error = assertFailsWith<IllegalStateException> {
-            backend.send("whoami\n")
+            backend.send(bytesOf("whoami\n"))
         }
 
         assertEquals("FakeBackend is closed", error.message)
@@ -174,4 +189,6 @@ class FakeBackendTest {
         assertEquals(2, backend.closeCallCount)
         assertTrue(backend.isClosed)
     }
+
+    private fun bytesOf(text: String): TerminalBytes = TerminalBytes.of(text.encodeToByteArray())
 }

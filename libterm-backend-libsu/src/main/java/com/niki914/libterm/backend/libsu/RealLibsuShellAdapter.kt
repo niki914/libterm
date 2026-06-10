@@ -1,15 +1,17 @@
 package com.niki914.libterm.backend.libsu
 
+import com.niki914.libterm.SendResult
+import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.topjohnwu.superuser.Shell
-import java.io.IOException
 import java.io.InputStream
-import java.io.OutputStream
+import java.io.OutputStream as JavaOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,20 +54,20 @@ internal class RealLibsuShellSession(
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val closed = AtomicBoolean(false)
     private val closeSignal = CountDownLatch(1)
-    private val stdinReady = CompletableDeferred<OutputStream>()
+    private val stdinReady = CompletableDeferred<JavaOutputStream>()
     private val exitSignal = CompletableDeferred<TerminalFailure?>()
     private val outputEvents = MutableSharedFlow<LibsuOutputEvent>(
         extraBufferCapacity = OUTPUT_BUFFER_CAPACITY,
     )
 
     @Volatile
-    private var stdin: OutputStream? = null
+    private var stdin: JavaOutputStream? = null
 
     override val output: Flow<LibsuOutputEvent> = outputEvents
 
     init {
         shell.submitTask(object : Shell.Task {
-            override fun run(stdin: OutputStream, stdout: InputStream, stderr: InputStream) {
+            override fun run(stdin: JavaOutputStream, stdout: InputStream, stderr: InputStream) {
                 this@RealLibsuShellSession.stdin = stdin
                 stdinReady.complete(stdin)
 
@@ -87,15 +89,34 @@ internal class RealLibsuShellSession(
         })
     }
 
-    override suspend fun write(input: String) {
+    override suspend fun write(input: TerminalBytes): SendResult {
         if (closed.get()) {
-            throw IOException("libsu shell session is closed")
+            return SendResult.Failed(
+                TerminalFailure.RuntimeTerminated(
+                    identity = identity,
+                    message = "libsu shell session is closed",
+                ),
+            )
         }
 
-        val target = stdinReady.await()
-        withContext(ioDispatcher) {
-            target.write(input.toByteArray(Charsets.UTF_8))
-            target.flush()
+        return try {
+            val target = stdinReady.await()
+            withContext(ioDispatcher) {
+                target.write(input.toByteArray())
+                target.flush()
+            }
+            SendResult.Sent
+        } catch (error: Throwable) {
+            if (error is CancellationException) {
+                throw error
+            }
+            SendResult.Failed(
+                TerminalFailure.RuntimeTerminated(
+                    identity = identity,
+                    message = error.message,
+                    cause = error,
+                ),
+            )
         }
     }
 
@@ -121,7 +142,7 @@ internal class RealLibsuShellSession(
 
     private suspend fun pump(
         input: InputStream,
-        toEvent: (String) -> LibsuOutputEvent,
+        toEvent: (TerminalBytes) -> LibsuOutputEvent,
     ) {
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         try {
@@ -131,7 +152,7 @@ internal class RealLibsuShellSession(
                     break
                 }
                 if (read > 0) {
-                    outputEvents.emit(toEvent(String(buffer, 0, read, Charsets.UTF_8)))
+                    outputEvents.emit(toEvent(TerminalBytes.of(buffer.copyOf(read))))
                 }
             }
         } catch (throwable: Throwable) {

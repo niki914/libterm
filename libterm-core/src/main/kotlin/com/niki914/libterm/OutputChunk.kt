@@ -1,7 +1,7 @@
 package com.niki914.libterm
 
 data class OutputChunk(
-    val text: String,
-    val isStderr: Boolean,
+    val stream: OutputStream,
+    val bytes: TerminalBytes,
     val timestampMillis: Long,
 )
