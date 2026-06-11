@@ -1,7 +1,13 @@
+<div align="right">
+
+**[English](README.md)** | 中文
+
+</div>
+
 # libterm
 
-一个面向 Android 的终端会话库，基于 libsu 与 Shizuku 提供普通用户、Root、Shizuku 三类 shell 会话。
-提供统一 `Term` 门面，既支持阻塞式 `exec`，也支持面向终端模拟器的流式 `write + stream` 交互。
+一个面向 Android 的终端会话库，基于 libsu 与 Shizuku 提供 `USER`、`ROOT`、`SHIZUKU` 三类 shell 会话。
+提供统一的 `Term` 门面，既支持阻塞式 `exec`，也支持面向终端模拟器的流式 `write + stream` 交互。
 
 ## Demo
 
@@ -17,84 +23,67 @@ Demo 会创建 `USER`、`ROOT`、`SHIZUKU` 三个 `Term`，展示显式 `open()`
 
 ```kotlin
 val user = LibTerm.newUserTerm()
-val su = LibTerm.newSuTerm()
+val root = LibTerm.newSuTerm()
 val shizuku = LibTerm.newShizukuTerm(applicationContext)
 ```
 
-三个入口的语义：
+门面入口语义：
 
 - `LibTerm.newUserTerm()`：普通 shell，不需要 `Context`
-- `LibTerm.newSuTerm()`：root shell，不需要 `Context`
-- `LibTerm.newShizukuTerm(context)`：Shizuku shell，必须传 `Context`
+- `LibTerm.newSuTerm()`：Root shell，不需要 `Context`
+- `LibTerm.newShizukuTerm(context)`：Shizuku shell，需要传 `Context`
+- `LibTerm.createDefaultManager(...)`：更底层的入口，适合自己管理 session
 
-`Term` 是新的主门面：
+`Term` 是应用层主门面：
 
 - `open()`：显式打开长期 shell 会话
 - `exec(command, timeoutMillis)`：在当前 shell 上执行一条命令，并等待完成或超时
 - `write(text)` / `write(bytes)`：向长期 shell 输入流写入数据
 - `stream`：持续输出流，适合终端模拟器 UI
 - `state`：暴露会话生命周期状态
+- `close()`：关闭当前 term，并释放其持有的资源
 
 如果你需要完全自定义后端、权限检查、ID 生成或时钟，也可以继续直接使用 `libterm-core` 的 `TerminalManager` / `TerminalSession`。
 
 ## Features
 
-- 多后端身份：`USER`、`ROOT`、`SHIZUKU`
-- Android 默认运行时门面：`LibTerm.newUserTerm` / `newSuTerm` / `newShizukuTerm`
+- 多身份支持：`USER`、`ROOT`、`SHIZUKU`
+- Android 运行时门面：`LibTerm.newUserTerm` / `newSuTerm` / `newShizukuTerm`
 - 双模式 API：阻塞式 `exec` + 流式 `write + stream`
 - 超时语义：`exec` 支持 `timeoutMillis`，超时时返回当前已流出的部分内容
 - 会话生命周期：`Starting`、`Running`、`Closed`、`Failed`
-- 输出缓冲：底层仍按 chunk 数和字节数保留最近输出
-- 错误模型：打开、发送、运行时退出均返回结构化 `TerminalFailure`
+- 结构化错误模型：统一通过 `TerminalFailure` 表达失败原因
 - 可测试核心：`libterm-core` 不依赖 Android，可注入 fake backend/provider
-
-## 模块
-
-| Module | 作用 |
-|---|---|
-| `libterm-core` | 核心 API、会话管理、状态、错误、抽象后端 |
-| `libterm-backend-libsu` | 基于 libsu 的 `USER` / `ROOT` shell 后端 |
-| `libterm-backend-shizuku` | 基于 Shizuku 的 shell 后端 |
-| `libterm-runtime` | Android 默认门面，组装 core + libsu + Shizuku |
-| `shell-smoke-app` | 可运行 demo app |
 
 ## Installation
 
-### 源码依赖
-
-将本仓库作为 Gradle composite build 或子模块接入后，应用模块依赖 `libterm-runtime`：
+### Gradle (JitPack)
 
 ```kotlin
-dependencies {
-    implementation(project(":libterm-runtime"))
+dependencyResolutionManagement {
+    repositories {
+        maven("https://jitpack.io")
+        mavenCentral()
+        google()
+    }
 }
 ```
 
-`libterm-runtime` 会通过 `api(project(":libterm-core"))` 暴露核心 API，并在内部依赖 libsu 与 Shizuku 后端。
+```kotlin
+dependencies {
+    implementation("com.github.niki914.libterm:libterm-runtime:v1-0.1")
+}
+```
 
-### Gradle 配置要求
-
-当前工程配置：
-
-| Field | Value |
-|---|---|
-| `minSdk` | `26` |
-| `compileSdk` | `35` |
-| Java/Kotlin target | `17` |
-| Kotlin | `2.1.0` |
-| Coroutines | `1.10.2` |
-| libsu | `6.0.0` |
-| Shizuku | `13.1.5` |
-
-如果发布到 JitPack 或 Maven，请以发布产物的实际坐标为准。当前仓库内版本为 `0.0.1-SNAPSHOT`。
+`libterm-runtime` 会对 Android 调用方暴露核心 API，并在内部组装 libsu 与 Shizuku 后端。
 
 ## Quick Start
 
 主入口是 `Term`。简单调用方直接使用 `exec`，终端型调用方使用 `open + stream + write`。
 
 ```kotlin
-import com.niki914.libterm.runtime.TermResult
 import com.niki914.libterm.runtime.LibTerm
+import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.launch
 
 val term = LibTerm.newUserTerm()
@@ -115,8 +104,8 @@ launch {
 交互式调用：
 
 ```kotlin
-import com.niki914.libterm.runtime.TermResult
 import com.niki914.libterm.runtime.LibTerm
+import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.launch
 
 val term = LibTerm.newShizukuTerm(applicationContext)
@@ -160,8 +149,8 @@ val shizuku = LibTerm.newShizukuTerm(applicationContext)
 
 | Identity | 后端 | 说明 |
 |---|---|---|
-| `USER` | libsu | 普通 shell，不需要 root 授权 |
-| `ROOT` | libsu | root shell，需要设备具备 root 能力并授权 |
+| `USER` | libsu | 普通 shell，不需要 Root 授权 |
+| `ROOT` | libsu | Root shell，需要设备具备 Root 能力并授权 |
 | `SHIZUKU` | Shizuku | Shizuku shell，需要 Shizuku 已安装、运行并授权 |
 
 ## 权限模式
@@ -169,8 +158,8 @@ val shizuku = LibTerm.newShizukuTerm(applicationContext)
 `Term` 默认按需请求权限：
 
 - `newUserTerm()`：无需额外授权
-- `newSuTerm()`：由 libsu 检查和请求 root 授权
-- `newShizukuTerm(context)`：由 Shizuku 检查和请求授权
+- `newSuTerm()`：由 libsu 检查并在需要时请求 Root 授权
+- `newShizukuTerm(context)`：由 Shizuku 检查并在需要时请求授权
 
 如果你需要 `CHECK_ONLY` 这类更细粒度的权限策略，请改用底层 `TerminalManager` API。
 
@@ -226,16 +215,7 @@ data class OutputChunk(
 - `OutputStream.STDOUT`
 - `OutputStream.STDERR`
 
-默认缓冲配置：
-
-```kotlin
-TerminalBufferConfig(
-    maxChunkCount = 256,
-    maxByteCount = 65_536,
-)
-```
-
-可在创建默认 manager 时调整：
+如果你需要调整缓冲上限，可以自己创建 manager：
 
 ```kotlin
 val manager = LibTerm.createDefaultManager(
@@ -250,7 +230,7 @@ val manager = LibTerm.createDefaultManager(
 
 ## 会话状态
 
-`TerminalSession.state` 是 `StateFlow<SessionState>`：
+`Term.state` 和 `TerminalSession.state` 都暴露 `StateFlow<SessionState>`：
 
 ```kotlin
 session.state.collect { state ->
@@ -271,6 +251,26 @@ sealed interface SessionState {
     data object Running : SessionState
     data object Closed : SessionState
     data class Failed(val failure: TerminalFailure) : SessionState
+}
+```
+
+## Term API
+
+```kotlin
+interface Term {
+    val state: StateFlow<SessionState>
+    val stream: Flow<OutputChunk>
+
+    suspend fun open(): TermResult<Unit>
+
+    suspend fun exec(
+        command: String,
+        timeoutMillis: Long = DEFAULT_EXEC_TIMEOUT_MILLIS,
+    ): TermResult<CommandResult>
+
+    suspend fun write(text: String): TermResult<Unit>
+    suspend fun write(bytes: ByteArray): TermResult<Unit>
+    suspend fun close(): TermResult<Unit>
 }
 ```
 
@@ -335,20 +335,29 @@ when (val result = session.send("id\n".encodeToByteArray())) {
 }
 ```
 
+`Term` 层会继续把失败包装成 `TermResult.Failure`：
+
+```kotlin
+when (val result = term.exec("id")) {
+    is TermResult.Success -> println(result.value.exitCode)
+    is TermResult.Failure -> println(result.failure.message)
+}
+```
+
 `TerminalFailure` 类型：
 
 | Failure | 场景 |
 |---|---|
-| `BackendUnavailable` | 后端不可用，例如 Shizuku 未安装/未运行、Root 不可用 |
-| `AuthorizationDenied` | 权限被拒绝 |
-| `AuthorizationFailed` | 权限请求过程失败 |
+| `BackendUnavailable` | 后端不可用，例如 Shizuku 未安装、未运行，或 Root 不可用 |
+| `AuthorizationDenied` | 权限被明确拒绝 |
+| `AuthorizationFailed` | 权限请求过程异常失败 |
 | `StartupFailed` | shell 启动失败 |
 | `RuntimeTerminated` | shell 运行中异常终止 |
-| `AlreadyClosed` | 会话或后端已关闭，无法继续发送 |
+| `AlreadyClosed` | 会话或后端已关闭 |
 
 ## 关闭资源
 
-建议在 Activity/ViewModel 销毁时关闭会话，并取消传给 manager 的 `CoroutineScope`：
+建议在 Activity 或 ViewModel 销毁时关闭会话，并取消传给 manager 的 `CoroutineScope`：
 
 ```kotlin
 override fun onDestroy() {
@@ -365,19 +374,20 @@ override fun onDestroy() {
 }
 ```
 
-如果你直接持有 `TerminalSession`，也可以调用：
+如果你直接持有 `TerminalSession` 或 `Term`，也可以显式关闭：
 
 ```kotlin
 session.close()
+term.close()
 ```
 
 ## FAQ
 
 ### 为什么 `send` 成功后没有立刻读到输出？
 
-`send` 只表示输入已经写入 shell。命令执行和输出回传是异步的，调用方需要稍后读取 `latest(...)`，或持续刷新 UI。
+`send` 只表示输入已经写入 shell。命令执行和输出回传是异步的，调用方需要稍后读取 `latest(...)`，或者持续消费输出流。
 
-### 命令为什么要追加换行？
+### 命令为什么通常要追加换行？
 
 shell 通常需要收到回车才会执行命令。因此发送文本命令时一般使用：
 
@@ -387,11 +397,11 @@ session.send(TerminalBytes.of("ls -la\n".encodeToByteArray()))
 
 ### Root 打不开通常是什么原因？
 
-常见原因是设备没有 root、root 管理器拒绝授权，或当前环境无法通过 libsu 获取 root shell。此时 `open(TerminalIdentity.ROOT)` 会返回 `OpenResult.Failure`，失败原因在 `TerminalFailure.message` 中。
+常见原因是设备没有 Root、Root 管理器拒绝授权，或者当前环境无法通过 libsu 获取 Root shell。此时 `open(TerminalIdentity.ROOT)` 会返回 `OpenResult.Failure`。
 
 ### Shizuku 打不开通常是什么原因？
 
-常见原因是 Shizuku 未安装、未运行或未授权。`libterm-backend-shizuku` 会声明 `ShizukuProvider`，应用仍需要用户侧完成 Shizuku 启动和授权流程。
+常见原因是 Shizuku 未安装、未运行或未授权。后端可以发起授权流程，但前提仍然是用户侧已经具备可用的 Shizuku 运行环境。
 
 ### 如何只检查权限，不弹授权？
 
@@ -406,4 +416,5 @@ val result = manager.open(
 
 ### 输出会无限增长吗？
 
-不会。`TerminalSession` 只保留最近输出，默认最多 `256` 个 chunk 或 `65_536` 字节。可以通过 `TerminalBufferConfig` 调整。
+不会。`TerminalSession` 只保留最近输出，缓冲是有上限的；如果你需要更大的窗口，可以通过 `TerminalBufferConfig` 调整。
+EOF; __tr_native_ec=$?; pwd -P >| '/var/folders/_c/6lxjwz7n11b_n2934w__bt0c0000gn/T/agent-toolhost/jobs/job-7bdd573ec98346a192ab3dc42735dd08/cwd.txt'; exit "$__tr_native_ec"
