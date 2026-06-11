@@ -4,6 +4,14 @@
     <application
         android:label="Shell Smoke"
         android:theme="@style/AppTheme">
+        <receiver
+            android:name=".AdbCommandReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.niki914.libterm.shellsmoke.action.EXEC" />
+            </intent-filter>
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:exported="true">
