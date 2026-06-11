@@ -5,8 +5,11 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -24,6 +27,10 @@ class TerminalSession(
     private val buffer = mutableListOf<OutputChunk>()
 
     private val _state = MutableStateFlow<SessionState>(SessionState.Closed)
+    private val outputEvents = MutableSharedFlow<OutputChunk>(
+        replay = 0,
+        extraBufferCapacity = 64,
+    )
 
     private var totalBufferedBytes: Int = 0
     private var startDeferred: CompletableDeferred<SessionState>? = null
@@ -35,6 +42,7 @@ class TerminalSession(
     private var closeInvoked: Boolean = false
 
     val state: StateFlow<SessionState> = _state.asStateFlow()
+    val output: Flow<OutputChunk> = outputEvents.asSharedFlow()
 
     val currentState: SessionState
         get() = state.value
@@ -234,6 +242,7 @@ class TerminalSession(
                     try {
                         backend.output.collect { chunk ->
                             appendChunk(chunk)
+                            outputEvents.emit(chunk)
                         }
                     } catch (error: Throwable) {
                         if (error is CancellationException) {

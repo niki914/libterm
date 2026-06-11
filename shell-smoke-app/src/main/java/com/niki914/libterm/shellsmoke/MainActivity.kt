@@ -1,51 +1,61 @@
 package com.niki914.libterm.shellsmoke
 
 import android.app.Activity
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.InputType
+import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
-import com.niki914.libterm.AuthorizationResult
-import com.niki914.libterm.BackendAvailability
-import com.niki914.libterm.BackendStartResult
-import com.niki914.libterm.Clock
 import com.niki914.libterm.OutputChunk
-import com.niki914.libterm.SendResult
-import com.niki914.libterm.TerminalBackend
-import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
-import com.niki914.libterm.TerminalIdentity
-import com.niki914.libterm.backend.libsu.LibsuPrivilegeProvider
-import com.niki914.libterm.backend.libsu.LibsuTerminalBackend
-import com.niki914.libterm.backend.shizuku.ShizukuPrivilegeAuthorizer
-import com.niki914.libterm.backend.shizuku.ShizukuPrivilegeProvider
-import com.niki914.libterm.backend.shizuku.ShizukuTerminalBackend
+import com.niki914.libterm.runtime.LibTerm
+import com.niki914.libterm.runtime.Term
+import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 
 class MainActivity : Activity() {
     private val uiScope = MainScope()
-    private val buttons = mutableListOf<Button>()
-    private lateinit var logView: TextView
-    private lateinit var scrollView: ScrollView
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private lateinit var sessions: List<DemoSessionViewState>
+    private var activeSessionIndex: Int = 0
+    private lateinit var statusView: TextView
+    private lateinit var outputView: TextView
+    private lateinit var inputView: EditText
+    private val actionButtons: MutableList<Button> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        sessions = listOf(
+            DemoSessionViewState(label = "USER", term = LibTerm.newUserTerm()),
+            DemoSessionViewState(label = "ROOT", term = LibTerm.newSuTerm()),
+            DemoSessionViewState(label = "SHIZUKU", term = LibTerm.newShizukuTerm(applicationContext)),
+        )
         setContentView(createContentView())
-        appendLog("Shell Smoke ready. 点击按钮执行 echo/id/pwd。")
+        renderUi("Tap a session to open")
     }
 
     override fun onDestroy() {
+        sessions.forEach { state ->
+            state.renderJob?.cancel()
+        }
+        cleanupScope.launch {
+            sessions.forEach { state ->
+                state.term.close()
+            }
+            cleanupScope.cancel()
+        }
         uiScope.cancel()
         super.onDestroy()
     }
@@ -55,30 +65,239 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((16 * density).toInt(), (16 * density).toInt(), (16 * density).toInt(), (16 * density).toInt())
+            setBackgroundColor(Color.BLACK)
         }
 
-        root.addView(button("Run USER shell") { runSmoke(ShellMode.USER) })
-        root.addView(button("Run ROOT shell") { runSmoke(ShellMode.ROOT) })
-        root.addView(button("Run SHIZUKU shell") { runSmoke(ShellMode.SHIZUKU) })
-        root.addView(button("Clear log") { logView.text = "" })
+        createSessionButtons(root)
+        createToolbar(root)
 
-        logView = TextView(this).apply {
-            textSize = 13f
-            typeface = android.graphics.Typeface.MONOSPACE
+        statusView = TextView(this).apply {
+            textSize = 14f
+            setTextColor(Color.WHITE)
             setTextIsSelectable(true)
         }
-        scrollView = ScrollView(this).apply {
-            addView(logView)
+        root.addView(statusView)
+
+        outputView = TextView(this).apply {
+            textSize = 13f
+            typeface = Typeface.MONOSPACE
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.BLACK)
+            setTextIsSelectable(true)
         }
         root.addView(
-            scrollView,
+            outputView,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
                 1f,
             ),
         )
+
+        val inputRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.BLACK)
+        }
+        inputRow.addView(
+            TextView(this).apply {
+                text = "$"
+                textSize = 16f
+                typeface = Typeface.MONOSPACE
+                setTextColor(HACKER_GREEN)
+            },
+        )
+        inputView = EditText(this).apply {
+            setSingleLine(false)
+            minLines = 1
+            maxLines = 5
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            imeOptions = EditorInfo.IME_ACTION_SEND
+            typeface = Typeface.MONOSPACE
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            setBackgroundColor(Color.BLACK)
+            hint = "command"
+            setOnEditorActionListener { _, actionId, event ->
+                if (shouldSendFromEditorAction(actionId, event)) {
+                    sendInput()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        inputRow.addView(
+            inputView,
+            LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f,
+            ),
+        )
+        root.addView(inputRow)
+
         return root
+    }
+
+    private fun createSessionButtons(root: LinearLayout) {
+        val sessionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.BLACK)
+        }
+        sessions.forEachIndexed { index, state ->
+            sessionRow.addView(
+                button(state.label) { selectSession(index) }.trackAction(),
+                LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f,
+                ),
+            )
+        }
+        root.addView(sessionRow)
+    }
+
+    private fun shouldSendFromEditorAction(actionId: Int, event: KeyEvent?): Boolean {
+        if (actionId == EditorInfo.IME_ACTION_SEND) {
+            return true
+        }
+        return event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN
+    }
+
+    private fun createToolbar(root: LinearLayout) {
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.BLACK)
+        }
+        toolbar.addView(toolbarButton("up") { recallPreviousCommand() })
+        toolbar.addView(toolbarButton("tab") { insertInputText("\t") })
+        toolbar.addView(toolbarButton("../") { insertInputText("../") })
+        toolbar.addView(toolbarButton("\\n") { insertInputText("\n") })
+        root.addView(toolbar)
+    }
+
+    private fun toolbarButton(text: String, onClick: () -> Unit): Button {
+        return button(text, onClick).trackAction().apply {
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.DKGRAY)
+        }
+    }
+
+    private fun openSession(state: DemoSessionViewState) {
+        setActionsEnabled(false)
+        setStatus("OPENING: ${state.label}")
+        uiScope.launch {
+            when (val result = state.term.open()) {
+                is TermResult.Success -> registerSession(state)
+                is TermResult.Failure -> renderUi("OPEN FAILED: ${result.failure.describeForDemo()}")
+            }
+            setActionsEnabled(true)
+        }
+    }
+
+    private fun registerSession(state: DemoSessionViewState) {
+        if (state.renderJob == null) {
+            state.renderJob = startRenderJob(state)
+        }
+        renderUi("OPENED: ${state.label}")
+    }
+
+    private fun selectSession(index: Int) {
+        activeSessionIndex = index
+        val state = sessions[index]
+        renderUi("SELECTED: ${state.label}")
+        if (state.renderJob == null) {
+            openSession(state)
+        }
+    }
+
+    private fun sendInput() {
+        setActionsEnabled(false)
+        uiScope.launch {
+            val state = activeState()
+            when (val openResult = state.term.open()) {
+                is TermResult.Failure -> {
+                    renderUi("OPEN FAILED: ${openResult.failure.describeForDemo()}")
+                    setActionsEnabled(true)
+                    return@launch
+                }
+
+                is TermResult.Success -> {
+                    if (state.renderJob == null) {
+                        state.renderJob = startRenderJob(state)
+                    }
+                }
+            }
+            val command = inputView.text.toString()
+            recordCommand(command)
+            inputView.text.clear()
+            val result = state.term.write(command + "\n")
+            renderUi(handleSendResult(result))
+            setActionsEnabled(true)
+        }
+    }
+
+    private fun handleSendResult(result: TermResult<Unit>): String {
+        return when (result) {
+            is TermResult.Success -> "SENT"
+            is TermResult.Failure -> "SEND FAILED: ${result.failure.describeForDemo()}"
+        }
+    }
+
+    private fun activeState(): DemoSessionViewState {
+        return sessions[activeSessionIndex]
+    }
+
+    private fun insertInputText(text: String) {
+        val start = inputView.selectionStart.coerceAtLeast(0)
+        val end = inputView.selectionEnd.coerceAtLeast(0)
+        inputView.text.replace(minOf(start, end), maxOf(start, end), text)
+    }
+
+    private fun recallPreviousCommand() {
+        val state = activeState()
+        if (state.commandHistory.isEmpty()) {
+            return
+        }
+        val cursor = state.historyCursor?.let { (it - 1).coerceAtLeast(0) } ?: state.commandHistory.lastIndex
+        state.historyCursor = cursor
+        inputView.setText(state.commandHistory[cursor])
+        inputView.setSelection(inputView.text.length)
+    }
+
+    private fun recordCommand(command: String) {
+        if (command.isBlank()) {
+            return
+        }
+        val state = activeState()
+        state.commandHistory += command
+        if (state.commandHistory.size > MAX_COMMAND_HISTORY) {
+            state.commandHistory.removeAt(0)
+        }
+        state.historyCursor = null
+    }
+
+    private fun startRenderJob(state: DemoSessionViewState): Job {
+        return uiScope.launch {
+            state.term.stream.collect { chunk ->
+                appendOutput(state, chunk)
+            }
+        }
+    }
+
+    private fun appendOutput(state: DemoSessionViewState, chunk: OutputChunk) {
+        state.renderedText = (state.renderedText + chunk.decodeForDemo())
+            .takeLast(MAX_RENDER_CHARS)
+        if (state == sessions[activeSessionIndex]) {
+            outputView.text = state.renderedText
+        }
+    }
+
+    private fun renderUi(status: String? = null) {
+        if (status != null) {
+            statusView.text = status
+        }
+        outputView.text = sessions[activeSessionIndex].renderedText
     }
 
     private fun button(text: String, onClick: () -> Unit): Button {
@@ -86,171 +305,42 @@ class MainActivity : Activity() {
             this.text = text
             isAllCaps = false
             setOnClickListener { onClick() }
-            buttons += this
         }
     }
 
-    private fun runSmoke(mode: ShellMode) {
-        uiScope.launch {
-            setButtonsEnabled(false)
-            appendLog("")
-            appendLog("===== ${mode.label} smoke start =====")
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    ShellSmokeRunner(applicationContext, mode).run()
-                }
-                appendLog(result)
-            } catch (error: Throwable) {
-                appendLog("FAILED: ${error.javaClass.simpleName}: ${error.message}")
-            } finally {
-                appendLog("===== ${mode.label} smoke end =====")
-                setButtonsEnabled(true)
-            }
-        }
+    private fun Button.trackAction(): Button {
+        actionButtons += this
+        return this
     }
 
-    private fun setButtonsEnabled(enabled: Boolean) {
-        buttons.forEach { it.isEnabled = enabled }
+    private fun setActionsEnabled(enabled: Boolean) {
+        actionButtons.forEach { it.isEnabled = enabled }
     }
 
-    private fun appendLog(message: String) {
-        android.util.Log.d(TAG, message)
-        logView.append(message)
-        logView.append("\n")
-        scrollView.post { scrollView.fullScroll(View.FOCUS_DOWN) }
+    private fun setStatus(status: String) {
+        statusView.text = status
     }
 
-    private enum class ShellMode(
+    private fun TerminalFailure.describeForDemo(): String {
+        return "${this::class.simpleName}(identity=${identity?.name ?: "NONE"}, message=${message ?: "no message"})"
+    }
+
+    private fun OutputChunk.decodeForDemo(): String {
+        return bytes.toByteArray().decodeToString()
+    }
+
+    private data class DemoSessionViewState(
         val label: String,
-        val identity: TerminalIdentity,
-    ) {
-        USER("USER", TerminalIdentity.USER),
-        ROOT("ROOT", TerminalIdentity.ROOT),
-        SHIZUKU("SHIZUKU", TerminalIdentity.SHIZUKU),
-    }
-
-    private class ShellSmokeRunner(
-        private val context: android.content.Context,
-        private val mode: ShellMode,
-    ) {
-        private val libsuProvider = LibsuPrivilegeProvider()
-        private val shizukuProvider = ShizukuPrivilegeProvider()
-        private val shizukuAuthorizer = ShizukuPrivilegeAuthorizer()
-
-        suspend fun run(): String {
-            val availability = availability()
-            val authorized = authorizeIfNeeded(availability)
-            if (!authorized) {
-                return "UNAVAILABLE: ${availability.describe()}"
-            }
-
-            val backendScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-            val backend = createBackend(backendScope)
-            val doneMarker = "__LIBTERM_SMOKE_DONE_${mode.label}_${System.currentTimeMillis()}__"
-            val captured = StringBuilder()
-
-            try {
-                val collecting = backendScope.async {
-                    withTimeout(OUTPUT_TIMEOUT_MILLIS) {
-                        backend.output.first { chunk ->
-                            captured.append(chunk.format())
-                            doneMarker in captured.toString()
-                        }
-                    }
-                }
-
-                when (val start = backend.start()) {
-                    BackendStartResult.Started -> Unit
-                    is BackendStartResult.Failed -> return "START FAILED: ${start.failure.describe()}"
-                }
-
-                val command = """
-                    echo "mode=${mode.label}"
-                    id
-                    pwd
-                    echo "$doneMarker"
-                """.trimIndent() + "\n"
-
-                when (val sent = backend.send(TerminalBytes.of(command.encodeToByteArray()))) {
-                    SendResult.Sent -> Unit
-                    is SendResult.Failed -> return "SEND FAILED: ${sent.failure.describe()}"
-                }
-
-                collecting.await()
-                return captured.toString().replace(doneMarker, "").trimEnd()
-            } finally {
-                backend.close()
-                backendScope.cancel()
-            }
-        }
-
-        private suspend fun availability(): BackendAvailability {
-            return when (mode) {
-                ShellMode.USER,
-                ShellMode.ROOT,
-                -> libsuProvider.getAvailability(mode.identity)
-
-                ShellMode.SHIZUKU -> shizukuProvider.getAvailability(mode.identity)
-            }
-        }
-
-        private suspend fun authorizeIfNeeded(availability: BackendAvailability): Boolean {
-            return when (availability) {
-                BackendAvailability.Available -> true
-                is BackendAvailability.Unavailable -> false
-                is BackendAvailability.Unauthorized -> when (mode) {
-                    ShellMode.SHIZUKU -> shizukuAuthorizer.requestAuthorization(mode.identity) == AuthorizationResult.Granted
-                    ShellMode.USER,
-                    ShellMode.ROOT,
-                    -> false
-                }
-            }
-        }
-
-        private fun createBackend(scope: CoroutineScope): TerminalBackend {
-            return when (mode) {
-                ShellMode.USER,
-                ShellMode.ROOT,
-                -> LibsuTerminalBackend(
-                    identity = mode.identity,
-                    clock = SystemClock,
-                    scope = scope,
-                )
-
-                ShellMode.SHIZUKU -> ShizukuTerminalBackend(
-                    context = context,
-                    clock = SystemClock,
-                    scope = scope,
-                )
-            }
-        }
-
-        private fun BackendAvailability.describe(): String {
-            return when (this) {
-                BackendAvailability.Available -> "available"
-                is BackendAvailability.Unavailable -> failure.describe()
-                is BackendAvailability.Unauthorized -> failure.describe()
-            }
-        }
-
-        private fun TerminalFailure.describe(): String {
-            return listOfNotNull(
-                identity?.name,
-                message,
-            ).joinToString(separator = ": ").ifBlank { toString() }
-        }
-
-        private fun OutputChunk.format(): String {
-            return "[${stream.name}] ${bytes.toByteArray().decodeToString()}"
-        }
-
-        private object SystemClock : Clock {
-            override fun nowMillis(): Long = System.currentTimeMillis()
-        }
-    }
+        val term: Term,
+        var renderJob: Job? = null,
+        var renderedText: String = "",
+        val commandHistory: MutableList<String> = mutableListOf(),
+        var historyCursor: Int? = null,
+    )
 
     private companion object {
-        private const val TAG = "qwerqwer"
-        private const val OUTPUT_TIMEOUT_MILLIS = 5_000L
+        private const val MAX_RENDER_CHARS = 12_000
+        private const val MAX_COMMAND_HISTORY = 20
+        private val HACKER_GREEN = Color.rgb(57, 255, 20)
     }
 }

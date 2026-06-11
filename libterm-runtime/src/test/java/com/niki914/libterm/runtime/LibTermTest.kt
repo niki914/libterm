@@ -27,6 +27,23 @@ class LibTermTest {
     }
 
     @Test
+    fun `new user term returns term facade`() {
+        val term: Any = LibTerm.newUserTerm(scope = TestScope())
+
+        assertIs<Term>(term)
+    }
+
+    @Test
+    fun `new shizuku term returns term facade`() {
+        val term: Any = LibTerm.newShizukuTerm(
+            context = RuntimeTestContext(),
+            scope = TestScope(),
+        )
+
+        assertIs<Term>(term)
+    }
+
+    @Test
     fun `runtime does not expose libterm facade production type`() {
         assertFailsWith<ClassNotFoundException> {
             Class.forName("com.niki914.libterm.runtime.LibTermFacade")
