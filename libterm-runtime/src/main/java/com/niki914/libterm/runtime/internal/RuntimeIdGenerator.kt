@@ -1,4 +1,4 @@
-package com.niki914.libterm.runtime
+package com.niki914.libterm.runtime.internal
 
 import com.niki914.libterm.IdGenerator
 import java.util.UUID

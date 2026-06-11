@@ -13,6 +13,7 @@ import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
 import com.niki914.libterm.TerminalBytes
+import com.niki914.libterm.runtime.internal.DefaultTerm
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async

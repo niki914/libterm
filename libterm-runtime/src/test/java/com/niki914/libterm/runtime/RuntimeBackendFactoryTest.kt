@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import com.niki914.libterm.Clock
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.runtime.internal.RuntimeBackendFactory
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals

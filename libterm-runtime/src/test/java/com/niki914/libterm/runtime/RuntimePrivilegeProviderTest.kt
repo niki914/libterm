@@ -4,6 +4,7 @@ import com.niki914.libterm.BackendAvailability
 import com.niki914.libterm.PrivilegeProvider
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.runtime.internal.RuntimePrivilegeProvider
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals

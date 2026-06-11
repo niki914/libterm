@@ -1,4 +1,4 @@
-package com.niki914.libterm.runtime
+package com.niki914.libterm.runtime.internal
 
 import com.niki914.libterm.OpenResult
 import com.niki914.libterm.OutputChunk
@@ -10,6 +10,9 @@ import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
 import com.niki914.libterm.TerminalSession
+import com.niki914.libterm.runtime.CommandResult
+import com.niki914.libterm.runtime.Term
+import com.niki914.libterm.runtime.TermResult
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

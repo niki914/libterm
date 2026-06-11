@@ -1,4 +1,4 @@
-package com.niki914.libterm.runtime
+package com.niki914.libterm.runtime.internal
 
 internal object LibTermRuntimeMarker {
     internal const val MODULE_NAME: String = "libterm-runtime"
