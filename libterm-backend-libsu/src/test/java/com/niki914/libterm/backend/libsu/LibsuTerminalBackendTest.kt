@@ -8,8 +8,8 @@ import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.take
@@ -86,8 +86,16 @@ class LibsuTerminalBackendTest {
 
         assertEquals(
             listOf(
-                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("hello"), timestampMillis = 100L),
-                OutputChunk(stream = OutputStream.STDERR, bytes = bytesOf("oops"), timestampMillis = 105L),
+                OutputChunk(
+                    stream = OutputStream.STDOUT,
+                    bytes = bytesOf("hello"),
+                    timestampMillis = 100L
+                ),
+                OutputChunk(
+                    stream = OutputStream.STDERR,
+                    bytes = bytesOf("oops"),
+                    timestampMillis = 105L
+                ),
             ),
             collecting.await(),
         )
@@ -128,7 +136,13 @@ class LibsuTerminalBackendTest {
         backend.close()
 
         assertEquals(
-            listOf(OutputChunk(stream = OutputStream.STDOUT, bytes = nonUtf8, timestampMillis = 0L)),
+            listOf(
+                OutputChunk(
+                    stream = OutputStream.STDOUT,
+                    bytes = nonUtf8,
+                    timestampMillis = 0L
+                )
+            ),
             collecting.await(),
         )
     }

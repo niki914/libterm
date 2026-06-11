@@ -7,10 +7,10 @@ import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.backend.shizuku.internal.RealShizukuPermissionRequester
 import com.niki914.libterm.backend.shizuku.internal.ShizukuPermissionRequester
 import com.niki914.libterm.backend.shizuku.internal.ShizukuPermissionResultListener
-import java.util.concurrent.atomic.AtomicInteger
-import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
 
 class ShizukuPrivilegeAuthorizer internal constructor(
     private val permissionRequester: ShizukuPermissionRequester,

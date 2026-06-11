@@ -26,7 +26,9 @@ internal class RuntimePrivilegeAuthorizer(
         return when (val availability = libsuProvider.getAvailability(identity)) {
             BackendAvailability.Available -> AuthorizationResult.Granted
             is BackendAvailability.Unauthorized -> availability.failure.toDeniedOrFailed(identity)
-            is BackendAvailability.Unavailable -> availability.failure.toUnavailableOrFailed(identity)
+            is BackendAvailability.Unavailable -> availability.failure.toUnavailableOrFailed(
+                identity
+            )
         }
     }
 

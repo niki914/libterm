@@ -229,7 +229,7 @@ class TerminalSession(
                 SessionState.Closed -> completeIfNeeded(pendingClose, existingState)
                 SessionState.Running,
                 SessionState.Starting,
-                -> Unit
+                    -> Unit
             }
         }
         return pendingClose.await()
@@ -286,7 +286,7 @@ class TerminalSession(
                 SessionState.Closed,
                 SessionState.Starting,
                 SessionState.Running,
-                -> exitFailure?.let(SessionState::Failed) ?: SessionState.Closed
+                    -> exitFailure?.let(SessionState::Failed) ?: SessionState.Closed
             }
 
             _state.value = resolvedState
@@ -308,7 +308,7 @@ class TerminalSession(
                 SessionState.Closed -> existingState
                 SessionState.Starting,
                 SessionState.Running,
-                -> SessionState.Failed(failure)
+                    -> SessionState.Failed(failure)
             }
 
             _state.value = resolvedState

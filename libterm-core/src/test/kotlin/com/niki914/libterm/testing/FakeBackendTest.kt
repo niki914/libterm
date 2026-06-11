@@ -17,8 +17,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -54,9 +54,21 @@ class FakeBackendTest {
 
         assertEquals(
             listOf(
-                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("hello"), timestampMillis = 100L),
-                OutputChunk(stream = OutputStream.STDERR, bytes = bytesOf("oops"), timestampMillis = 105L),
-                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("done"), timestampMillis = 112L),
+                OutputChunk(
+                    stream = OutputStream.STDOUT,
+                    bytes = bytesOf("hello"),
+                    timestampMillis = 100L
+                ),
+                OutputChunk(
+                    stream = OutputStream.STDERR,
+                    bytes = bytesOf("oops"),
+                    timestampMillis = 105L
+                ),
+                OutputChunk(
+                    stream = OutputStream.STDOUT,
+                    bytes = bytesOf("done"),
+                    timestampMillis = 112L
+                ),
             ),
             outputs,
         )
@@ -77,8 +89,16 @@ class FakeBackendTest {
 
         assertEquals(
             listOf(
-                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("queued-1"), timestampMillis = 0L),
-                OutputChunk(stream = OutputStream.STDERR, bytes = bytesOf("queued-2"), timestampMillis = 0L),
+                OutputChunk(
+                    stream = OutputStream.STDOUT,
+                    bytes = bytesOf("queued-1"),
+                    timestampMillis = 0L
+                ),
+                OutputChunk(
+                    stream = OutputStream.STDERR,
+                    bytes = bytesOf("queued-2"),
+                    timestampMillis = 0L
+                ),
             ),
             collector.await(),
         )

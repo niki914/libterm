@@ -26,6 +26,7 @@ class TerminalManager(
                 authorizationMode = authorizationMode,
                 failure = availability.failure,
             )
+
             BackendAvailability.Available -> openAvailableSession(identity)
         }
     }
@@ -108,7 +109,7 @@ class TerminalManager(
             is SessionState.Failed -> OpenResult.Failure(state.failure)
             SessionState.Closed,
             SessionState.Starting,
-            -> OpenResult.Failure(
+                -> OpenResult.Failure(
                 TerminalFailure.StartupFailed(
                     identity = identity,
                     message = "Session did not enter running state",

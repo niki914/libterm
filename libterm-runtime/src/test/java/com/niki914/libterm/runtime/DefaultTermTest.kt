@@ -9,12 +9,11 @@ import com.niki914.libterm.OutputStream
 import com.niki914.libterm.PrivilegeProvider
 import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBackend
+import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
-import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.runtime.internal.DefaultTerm
-import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

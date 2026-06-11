@@ -6,10 +6,10 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -17,7 +17,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -86,7 +85,11 @@ class TerminalSessionTest {
 
         assertEquals(
             listOf(
-                OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("wxyz"), timestampMillis = 0L),
+                OutputChunk(
+                    stream = OutputStream.STDOUT,
+                    bytes = bytesOf("wxyz"),
+                    timestampMillis = 0L
+                ),
             ),
             session.latest(limit = 10),
         )
@@ -113,8 +116,20 @@ class TerminalSessionTest {
 
         val latest = session.latest(limit = 2)
         assertEquals(2, latest.size)
-        assertEquals(OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("out"), timestampMillis = 10L), latest[0])
-        assertEquals(OutputChunk(stream = OutputStream.STDERR, bytes = bytesOf("err"), timestampMillis = 15L), latest[1])
+        assertEquals(
+            OutputChunk(
+                stream = OutputStream.STDOUT,
+                bytes = bytesOf("out"),
+                timestampMillis = 10L
+            ), latest[0]
+        )
+        assertEquals(
+            OutputChunk(
+                stream = OutputStream.STDERR,
+                bytes = bytesOf("err"),
+                timestampMillis = 15L
+            ), latest[1]
+        )
 
         backend.finishNormally()
     }

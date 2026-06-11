@@ -20,7 +20,8 @@ internal interface ShizukuPermissionRequester {
 }
 
 internal class RealShizukuPermissionRequester : ShizukuPermissionRequester {
-    private val listeners = mutableMapOf<ShizukuPermissionResultListener, Shizuku.OnRequestPermissionResultListener>()
+    private val listeners =
+        mutableMapOf<ShizukuPermissionResultListener, Shizuku.OnRequestPermissionResultListener>()
 
     override fun isBinderAlive(): Boolean = Shizuku.pingBinder()
 
@@ -33,12 +34,13 @@ internal class RealShizukuPermissionRequester : ShizukuPermissionRequester {
     }
 
     override fun addRequestPermissionResultListener(listener: ShizukuPermissionResultListener) {
-        val shizukuListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
-            listener.onRequestPermissionResult(
-                requestCode = requestCode,
-                granted = grantResult == PackageManager.PERMISSION_GRANTED,
-            )
-        }
+        val shizukuListener =
+            Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+                listener.onRequestPermissionResult(
+                    requestCode = requestCode,
+                    granted = grantResult == PackageManager.PERMISSION_GRANTED,
+                )
+            }
         synchronized(listeners) {
             listeners[listener] = shizukuListener
         }

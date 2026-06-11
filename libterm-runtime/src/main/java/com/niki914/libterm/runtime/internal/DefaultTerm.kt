@@ -6,14 +6,12 @@ import com.niki914.libterm.OutputStream
 import com.niki914.libterm.SendResult
 import com.niki914.libterm.SessionState
 import com.niki914.libterm.TerminalBytes
-import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
 import com.niki914.libterm.TerminalSession
 import com.niki914.libterm.runtime.CommandResult
 import com.niki914.libterm.runtime.Term
 import com.niki914.libterm.runtime.TermResult
-import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -30,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.ByteArrayOutputStream
 
 internal class DefaultTerm(
     private val manager: TerminalManager,
@@ -101,7 +100,8 @@ internal class DefaultTerm(
                     }
                 }
 
-                when (val sendResult = session.send(buildExecPayload(command, execId).encodeToByteArray())) {
+                when (val sendResult =
+                    session.send(buildExecPayload(command, execId).encodeToByteArray())) {
                     SendResult.Sent -> Unit
                     is SendResult.Failed -> {
                         collectorJob.cancel()

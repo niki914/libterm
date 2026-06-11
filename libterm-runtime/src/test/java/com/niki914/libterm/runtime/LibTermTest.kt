@@ -6,8 +6,8 @@ import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.OutputStream
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalManager
-import java.io.File
 import kotlinx.coroutines.test.TestScope
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -84,7 +84,8 @@ class LibTermTest {
     private fun runtimeProductionSource(): File {
         var current: File? = File(requireNotNull(System.getProperty("user.dir")))
         while (current != null) {
-            val candidate = File(current, "libterm-runtime/src/main/java/com/niki914/libterm/runtime")
+            val candidate =
+                File(current, "libterm-runtime/src/main/java/com/niki914/libterm/runtime")
             if (candidate.isDirectory) {
                 return candidate
             }

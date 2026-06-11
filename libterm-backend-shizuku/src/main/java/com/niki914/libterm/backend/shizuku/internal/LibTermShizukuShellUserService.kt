@@ -47,7 +47,10 @@ internal class LibTermShizukuShellUserService : ILibTermShizukuShellService.Stub
                 session.stdin.flush()
             }
         } catch (error: Throwable) {
-            session.callback.safeOnError(sessionId, "Failed to write Shizuku shell stdin: ${error.message}")
+            session.callback.safeOnError(
+                sessionId,
+                "Failed to write Shizuku shell stdin: ${error.message}"
+            )
             closeSession(session)
             throw IllegalStateException("Failed to write Shizuku shell stdin", error)
         }
@@ -104,7 +107,10 @@ internal class LibTermShizukuShellUserService : ILibTermShizukuShellService.Stub
                 }
             } catch (error: Throwable) {
                 if (!closed.get()) {
-                    callback.safeOnError(id, "Failed to read Shizuku shell output: ${error.message}")
+                    callback.safeOnError(
+                        id,
+                        "Failed to read Shizuku shell output: ${error.message}"
+                    )
                     closeSession(this)
                 }
             }

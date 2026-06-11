@@ -1,7 +1,7 @@
 package com.niki914.libterm
 
-import com.niki914.libterm.testing.FakeBackend
 import com.niki914.libterm.testing.FakeAuthorizer
+import com.niki914.libterm.testing.FakeBackend
 import com.niki914.libterm.testing.FakeClock
 import com.niki914.libterm.testing.FakeProvider
 import com.niki914.libterm.testing.SequentialIdGenerator
@@ -168,26 +168,27 @@ class TerminalManagerTest {
     }
 
     @Test
-    fun `open backend startup failure returns explicit failure and does not register session`() = runTest {
-        val startupFailure = TerminalFailure.StartupFailed(
-            identity = TerminalIdentity.ROOT,
-            message = "boom",
-        )
-        val fixture = createFixture { identity, clock ->
-            FakeBackend(identity = identity, clock = clock).apply {
-                failOnStart(startupFailure)
+    fun `open backend startup failure returns explicit failure and does not register session`() =
+        runTest {
+            val startupFailure = TerminalFailure.StartupFailed(
+                identity = TerminalIdentity.ROOT,
+                message = "boom",
+            )
+            val fixture = createFixture { identity, clock ->
+                FakeBackend(identity = identity, clock = clock).apply {
+                    failOnStart(startupFailure)
+                }
             }
+
+            val result = fixture.manager.open(TerminalIdentity.ROOT)
+
+            val failure = assertIs<OpenResult.Failure>(result)
+            assertEquals(startupFailure, failure.failure)
+            assertEquals(listOf(TerminalIdentity.ROOT), fixture.requestedIdentities)
+            assertEquals(1, fixture.backend(0).startCallCount)
+            assertTrue(fixture.manager.list().isEmpty())
+            assertNull(fixture.manager.get("session-1"))
         }
-
-        val result = fixture.manager.open(TerminalIdentity.ROOT)
-
-        val failure = assertIs<OpenResult.Failure>(result)
-        assertEquals(startupFailure, failure.failure)
-        assertEquals(listOf(TerminalIdentity.ROOT), fixture.requestedIdentities)
-        assertEquals(1, fixture.backend(0).startCallCount)
-        assertTrue(fixture.manager.list().isEmpty())
-        assertNull(fixture.manager.get("session-1"))
-    }
 
     @Test
     fun `list preserves registration order and get returns matching session`() = runTest {

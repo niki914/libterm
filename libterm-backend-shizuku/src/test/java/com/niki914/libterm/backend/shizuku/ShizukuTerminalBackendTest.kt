@@ -61,7 +61,13 @@ class ShizukuTerminalBackendTest {
         backend.close()
 
         assertEquals(
-            listOf(OutputChunk(stream = OutputStream.STDOUT, bytes = bytesOf("hello"), timestampMillis = 100L)),
+            listOf(
+                OutputChunk(
+                    stream = OutputStream.STDOUT,
+                    bytes = bytesOf("hello"),
+                    timestampMillis = 100L
+                )
+            ),
             collecting.await(),
         )
     }

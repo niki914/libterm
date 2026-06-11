@@ -40,7 +40,10 @@ class MainActivity : Activity() {
         sessions = listOf(
             DemoSessionViewState(label = "USER", term = LibTerm.newUserTerm()),
             DemoSessionViewState(label = "ROOT", term = LibTerm.newSuTerm()),
-            DemoSessionViewState(label = "SHIZUKU", term = LibTerm.newShizukuTerm(applicationContext)),
+            DemoSessionViewState(
+                label = "SHIZUKU",
+                term = LibTerm.newShizukuTerm(applicationContext)
+            ),
         )
         setContentView(createContentView())
         renderUi("Tap a session to open")
@@ -64,7 +67,12 @@ class MainActivity : Activity() {
         val density = resources.displayMetrics.density
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((16 * density).toInt(), (16 * density).toInt(), (16 * density).toInt(), (16 * density).toInt())
+            setPadding(
+                (16 * density).toInt(),
+                (16 * density).toInt(),
+                (16 * density).toInt(),
+                (16 * density).toInt()
+            )
             setBackgroundColor(Color.BLACK)
         }
 
@@ -259,7 +267,8 @@ class MainActivity : Activity() {
         if (state.commandHistory.isEmpty()) {
             return
         }
-        val cursor = state.historyCursor?.let { (it - 1).coerceAtLeast(0) } ?: state.commandHistory.lastIndex
+        val cursor =
+            state.historyCursor?.let { (it - 1).coerceAtLeast(0) } ?: state.commandHistory.lastIndex
         state.historyCursor = cursor
         inputView.setText(state.commandHistory[cursor])
         inputView.setSelection(inputView.text.length)

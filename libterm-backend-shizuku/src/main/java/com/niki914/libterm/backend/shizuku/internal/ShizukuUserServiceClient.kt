@@ -11,7 +11,6 @@ import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.backend.shizuku.ILibTermShizukuShellCallback
 import com.niki914.libterm.backend.shizuku.ILibTermShizukuShellService
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -24,6 +23,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import rikka.shizuku.Shizuku
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -73,6 +73,7 @@ internal class ShizukuUserServiceClient(
                         pendingOutputEvents += PendingOutputEvent(sessionId, event)
                         false
                     }
+
                     else -> false
                 }
             }

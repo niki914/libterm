@@ -20,6 +20,7 @@ internal class RealShizukuAccessChecker : ShizukuAccessChecker {
             Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED -> {
                 ShizukuAccessState.Unauthorized
             }
+
             else -> ShizukuAccessState.Authorized
         }
     }
