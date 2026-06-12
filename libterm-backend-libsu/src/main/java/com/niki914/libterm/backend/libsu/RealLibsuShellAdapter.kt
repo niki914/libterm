@@ -68,14 +68,28 @@ internal class RealLibsuShellSession(
     init {
         shell.submitTask(object : Shell.Task {
             override fun run(stdin: JavaOutputStream, stdout: InputStream, stderr: InputStream) {
-                this@RealLibsuShellSession.stdin = stdin
-                stdinReady.complete(stdin)
+                try {
+                    if (!markStdinReadySafely(stdin)) {
+                        return
+                    }
 
-                scope.launch { pump(stdout) { LibsuOutputEvent.Stdout(it) } }
-                scope.launch { pump(stderr) { LibsuOutputEvent.Stderr(it) } }
+                    scope.launch { pump(stdout) { LibsuOutputEvent.Stdout(it) } }
+                    scope.launch { pump(stderr) { LibsuOutputEvent.Stderr(it) } }
 
-                closeSignal.await()
-                completeExit(null)
+                    closeSignal.await()
+                    completeExit(null)
+                } catch (error: Throwable) {
+                    if (error is CancellationException) {
+                        throw error
+                    }
+                    completeExit(
+                        TerminalFailure.RuntimeTerminated(
+                            identity = identity,
+                            message = error.message,
+                            cause = error,
+                        ),
+                    )
+                }
             }
 
             override fun shellDied() {
@@ -125,6 +139,7 @@ internal class RealLibsuShellSession(
             return
         }
 
+        failPendingStdinGate(message = "libsu shell session is closed")
         closeSignal.countDown()
         withContext(ioDispatcher) {
             runCatching { stdin?.close() }
@@ -169,11 +184,36 @@ internal class RealLibsuShellSession(
     }
 
     private fun completeExit(failure: TerminalFailure?) {
+        failPendingStdinGate(
+            message = failure?.message ?: "libsu shell session is closed",
+            cause = when (failure) {
+                is TerminalFailure.AuthorizationFailed -> failure.cause
+                is TerminalFailure.RuntimeTerminated -> failure.cause
+                is TerminalFailure.StartupFailed -> failure.cause
+                else -> null
+            },
+        )
         if (exitSignal.complete(failure)) {
             closed.set(true)
             closeSignal.countDown()
             scope.cancel()
         }
+    }
+
+    private fun failPendingStdinGate(message: String?, cause: Throwable? = null) {
+        if (stdinReady.isCompleted) {
+            return
+        }
+        stdinReady.completeExceptionally(IllegalStateException(message, cause))
+    }
+
+    private fun markStdinReadySafely(stdin: JavaOutputStream): Boolean {
+        this.stdin = stdin
+        if (stdinReady.complete(stdin)) {
+            return true
+        }
+        runCatching { stdin.close() }
+        return false
     }
 
     private companion object {

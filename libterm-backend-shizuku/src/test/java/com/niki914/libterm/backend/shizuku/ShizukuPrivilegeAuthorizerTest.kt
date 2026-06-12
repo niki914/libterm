@@ -7,6 +7,7 @@ import com.niki914.libterm.backend.shizuku.internal.ShizukuPermissionRequester
 import com.niki914.libterm.backend.shizuku.internal.ShizukuPermissionResultListener
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -120,18 +121,68 @@ class ShizukuPrivilegeAuthorizerTest {
         assertTrue(requester.listeners.isEmpty())
     }
 
+    @Test
+    fun `timeout without callback and final recheck false returns authorization failed and removes listener`() = runTest {
+        val timeoutMillis = 1_000L
+        val requester = FakeShizukuPermissionRequester()
+        val authorizer = createAuthorizer(
+            requester = requester,
+            requestTimeoutMillis = timeoutMillis,
+        )
+
+        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.SHIZUKU) }
+        runCurrent()
+
+        assertEquals(listOf(42), requester.requestedCodes)
+        assertEquals(1, requester.listeners.size)
+
+        advanceTimeBy(timeoutMillis)
+        runCurrent()
+
+        val failed = assertIs<AuthorizationResult.Failed>(deferred.await())
+        val failure = assertIs<TerminalFailure.AuthorizationFailed>(failed.failure)
+        assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
+        assertEquals("Timed out waiting for Shizuku authorization result", failure.message)
+        assertTrue(requester.listeners.isEmpty())
+    }
+
+    @Test
+    fun `timeout without callback but final recheck true returns granted and removes listener`() = runTest {
+        val timeoutMillis = 1_000L
+        val requester = FakeShizukuPermissionRequester()
+        val authorizer = createAuthorizer(
+            requester = requester,
+            requestTimeoutMillis = timeoutMillis,
+        )
+
+        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.SHIZUKU) }
+        runCurrent()
+
+        assertEquals(listOf(42), requester.requestedCodes)
+        assertEquals(1, requester.listeners.size)
+
+        requester.permissionGranted = true
+        advanceTimeBy(timeoutMillis)
+        runCurrent()
+
+        assertEquals(AuthorizationResult.Granted, deferred.await())
+        assertTrue(requester.listeners.isEmpty())
+    }
+
     private fun createAuthorizer(
         requester: FakeShizukuPermissionRequester,
+        requestTimeoutMillis: Long = 15_000L,
     ): ShizukuPrivilegeAuthorizer {
         return ShizukuPrivilegeAuthorizer(
             permissionRequester = requester,
             requestCodeGenerator = { 42 },
+            requestTimeoutMillis = requestTimeoutMillis,
         )
     }
 
     private class FakeShizukuPermissionRequester(
         private val binderAlive: Boolean = true,
-        private val permissionGranted: Boolean = false,
+        var permissionGranted: Boolean = false,
         private val requestError: Throwable? = null,
     ) : ShizukuPermissionRequester {
         val requestedCodes = mutableListOf<Int>()

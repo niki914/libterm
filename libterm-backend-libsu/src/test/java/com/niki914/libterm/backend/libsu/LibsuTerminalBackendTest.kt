@@ -192,6 +192,26 @@ class LibsuTerminalBackendTest {
     }
 
     @Test
+    fun `send returns failed when startup gate failure happens`() = runTest {
+        val failure = TerminalFailure.RuntimeTerminated(
+            identity = TerminalIdentity.USER,
+            message = "stdin startup gate failed",
+        )
+        val session = FakeLibsuShellSession().apply {
+            failStartupGateWith(failure)
+        }
+        val backend = createBackend(
+            identity = TerminalIdentity.USER,
+            adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
+        )
+
+        assertEquals(BackendStartResult.Started, backend.start())
+
+        val failed = assertIs<SendResult.Failed>(backend.send(bytesOf("id")))
+        assertEquals(failure, failed.failure)
+    }
+
+    @Test
     fun `close is idempotent and releases session once`() = runTest {
         val session = FakeLibsuShellSession()
         val backend = createBackend(
@@ -274,12 +294,14 @@ class LibsuTerminalBackendTest {
         override val output = outputEvents
 
         val writes = mutableListOf<TerminalBytes>()
+        private var startupGateFailure: TerminalFailure.RuntimeTerminated? = null
         private var writeFailure: TerminalFailure? = null
 
         var closeCallCount: Int = 0
             private set
 
         override suspend fun write(input: TerminalBytes): SendResult {
+            startupGateFailure?.let { return SendResult.Failed(it) }
             writeFailure?.let { return SendResult.Failed(it) }
             writes += input
             return SendResult.Sent
@@ -290,6 +312,10 @@ class LibsuTerminalBackendTest {
         }
 
         override suspend fun awaitExit(): TerminalFailure? = exitFailure
+
+        fun failStartupGateWith(failure: TerminalFailure.RuntimeTerminated) {
+            startupGateFailure = failure
+        }
 
         fun failWritesWith(failure: TerminalFailure) {
             writeFailure = failure

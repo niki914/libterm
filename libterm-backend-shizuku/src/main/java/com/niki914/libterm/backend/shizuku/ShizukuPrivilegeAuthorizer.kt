@@ -8,13 +8,16 @@ import com.niki914.libterm.backend.shizuku.internal.RealShizukuPermissionRequest
 import com.niki914.libterm.backend.shizuku.internal.ShizukuPermissionRequester
 import com.niki914.libterm.backend.shizuku.internal.ShizukuPermissionResultListener
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
 class ShizukuPrivilegeAuthorizer internal constructor(
     private val permissionRequester: ShizukuPermissionRequester,
     private val requestCodeGenerator: () -> Int,
+    private val requestTimeoutMillis: Long = DEFAULT_REQUEST_TIMEOUT_MILLIS,
 ) : PrivilegeAuthorizer {
     public constructor() : this(
         permissionRequester = RealShizukuPermissionRequester(),
@@ -37,13 +40,7 @@ class ShizukuPrivilegeAuthorizer internal constructor(
             if (error is CancellationException) {
                 throw error
             }
-            AuthorizationResult.Failed(
-                TerminalFailure.AuthorizationFailed(
-                    identity = TerminalIdentity.SHIZUKU,
-                    message = error.message,
-                    cause = error,
-                ),
-            )
+            authorizationFailed(message = error.message, cause = error)
         }
     }
 
@@ -61,6 +58,20 @@ class ShizukuPrivilegeAuthorizer internal constructor(
         }
 
         val requestCode = requestCodeGenerator()
+        return try {
+            withTimeout(requestTimeoutMillis) {
+                awaitAuthorizationResult(requestCode)
+            }
+        } catch (_: TimeoutCancellationException) {
+            if (permissionRequester.isPermissionGranted()) {
+                AuthorizationResult.Granted
+            } else {
+                authorizationFailed(message = "Timed out waiting for Shizuku authorization result")
+            }
+        }
+    }
+
+    private suspend fun awaitAuthorizationResult(requestCode: Int): AuthorizationResult {
         return suspendCancellableCoroutine { continuation ->
             lateinit var listener: ShizukuPermissionResultListener
             listener = ShizukuPermissionResultListener { callbackRequestCode, granted ->
@@ -92,21 +103,27 @@ class ShizukuPrivilegeAuthorizer internal constructor(
             } catch (error: Throwable) {
                 permissionRequester.removeRequestPermissionResultListener(listener)
                 if (continuation.isActive) {
-                    continuation.resume(
-                        AuthorizationResult.Failed(
-                            TerminalFailure.AuthorizationFailed(
-                                identity = TerminalIdentity.SHIZUKU,
-                                message = error.message,
-                                cause = error,
-                            ),
-                        ),
-                    )
+                    continuation.resume(authorizationFailed(message = error.message, cause = error))
                 }
             }
         }
     }
 
+    private fun authorizationFailed(
+        message: String?,
+        cause: Throwable? = null,
+    ): AuthorizationResult.Failed {
+        return AuthorizationResult.Failed(
+            TerminalFailure.AuthorizationFailed(
+                identity = TerminalIdentity.SHIZUKU,
+                message = message,
+                cause = cause,
+            ),
+        )
+    }
+
     private companion object {
+        private const val DEFAULT_REQUEST_TIMEOUT_MILLIS = 15_000L
         private val nextRequestCode = AtomicInteger(1)
     }
 }
