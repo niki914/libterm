@@ -126,7 +126,7 @@ class ShizukuTerminalBackendTest {
 
         val failed = assertIs<SendResult.Failed>(result)
         val failure = assertIs<TerminalFailure.AlreadyClosed>(failed.failure)
-        assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
+        assertEquals(TerminalIdentity.Shizuku, failure.identity)
         assertEquals("Shizuku backend has not been started", failure.message)
         assertEquals(0, clientFactory.openCallCount)
     }
@@ -134,7 +134,7 @@ class ShizukuTerminalBackendTest {
     @Test
     fun `client death maps to runtime terminated`() = runTest {
         val failure = TerminalFailure.RuntimeTerminated(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             message = "service died",
         )
         val client = FakeShizukuShellClient(exitFailure = failure)

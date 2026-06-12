@@ -15,10 +15,10 @@ internal class RuntimePrivilegeAuthorizer(
 ) : PrivilegeAuthorizer {
     override suspend fun requestAuthorization(identity: TerminalIdentity): AuthorizationResult {
         return when (identity) {
-            TerminalIdentity.USER,
-            TerminalIdentity.ROOT -> requestLibsuAuthorization(identity)
+            TerminalIdentity.User,
+            TerminalIdentity.Su -> requestLibsuAuthorization(identity)
 
-            TerminalIdentity.SHIZUKU -> shizukuAuthorizer.requestAuthorization(identity)
+            TerminalIdentity.Shizuku -> shizukuAuthorizer.requestAuthorization(identity)
         }
     }
 

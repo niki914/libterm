@@ -18,11 +18,11 @@ class ShizukuPrivilegeProviderTest {
             FakeShizukuAccessChecker(ShizukuAccessState.NotInstalledOrNotRunning),
         )
 
-        val result = provider.getAvailability(TerminalIdentity.SHIZUKU)
+        val result = provider.getAvailability(TerminalIdentity.Shizuku)
 
         val unavailable = assertIs<BackendAvailability.Unavailable>(result)
         val failure = assertIs<TerminalFailure.BackendUnavailable>(unavailable.failure)
-        assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
+        assertEquals(TerminalIdentity.Shizuku, failure.identity)
         assertEquals("Shizuku is not installed or not running", failure.message)
     }
 
@@ -32,11 +32,11 @@ class ShizukuPrivilegeProviderTest {
             FakeShizukuAccessChecker(ShizukuAccessState.Unauthorized),
         )
 
-        val result = provider.getAvailability(TerminalIdentity.SHIZUKU)
+        val result = provider.getAvailability(TerminalIdentity.Shizuku)
 
         val unauthorized = assertIs<BackendAvailability.Unauthorized>(result)
         val failure = assertIs<TerminalFailure.AuthorizationDenied>(unauthorized.failure)
-        assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
+        assertEquals(TerminalIdentity.Shizuku, failure.identity)
         assertEquals("Shizuku authorization was denied", failure.message)
     }
 
@@ -45,7 +45,7 @@ class ShizukuPrivilegeProviderTest {
         val checker = FakeShizukuAccessChecker(ShizukuAccessState.Authorized)
         val provider = ShizukuPrivilegeProvider(checker)
 
-        val result = provider.getAvailability(TerminalIdentity.SHIZUKU)
+        val result = provider.getAvailability(TerminalIdentity.Shizuku)
 
         assertEquals(BackendAvailability.Available, result)
         assertEquals(1, checker.checkCallCount)
@@ -56,11 +56,11 @@ class ShizukuPrivilegeProviderTest {
         val checker = FakeShizukuAccessChecker(ShizukuAccessState.Authorized)
         val provider = ShizukuPrivilegeProvider(checker)
 
-        val result = provider.getAvailability(TerminalIdentity.USER)
+        val result = provider.getAvailability(TerminalIdentity.User)
 
         val unavailable = assertIs<BackendAvailability.Unavailable>(result)
         val failure = assertIs<TerminalFailure.BackendUnavailable>(unavailable.failure)
-        assertEquals(TerminalIdentity.USER, failure.identity)
+        assertEquals(TerminalIdentity.User, failure.identity)
         assertEquals("Shizuku backend only supports SHIZUKU", failure.message)
         assertEquals(0, checker.checkCallCount)
     }
@@ -70,11 +70,11 @@ class ShizukuPrivilegeProviderTest {
         val checker = FakeShizukuAccessChecker(ShizukuAccessState.Authorized)
         val provider = ShizukuPrivilegeProvider(checker)
 
-        val result = provider.getAvailability(TerminalIdentity.ROOT)
+        val result = provider.getAvailability(TerminalIdentity.Su)
 
         val unavailable = assertIs<BackendAvailability.Unavailable>(result)
         val failure = assertIs<TerminalFailure.BackendUnavailable>(unavailable.failure)
-        assertEquals(TerminalIdentity.ROOT, failure.identity)
+        assertEquals(TerminalIdentity.Su, failure.identity)
         assertEquals("Shizuku backend only supports SHIZUKU", failure.message)
         assertEquals(0, checker.checkCallCount)
     }

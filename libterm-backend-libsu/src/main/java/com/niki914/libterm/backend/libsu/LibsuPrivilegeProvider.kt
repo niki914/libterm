@@ -12,11 +12,11 @@ class LibsuPrivilegeProvider internal constructor(
 
     override suspend fun getAvailability(identity: TerminalIdentity): BackendAvailability {
         return when (identity) {
-            TerminalIdentity.USER -> BackendAvailability.Available
-            TerminalIdentity.ROOT -> getRootAvailability()
-            TerminalIdentity.SHIZUKU -> BackendAvailability.Unavailable(
+            TerminalIdentity.User -> BackendAvailability.Available
+            TerminalIdentity.Su -> getRootAvailability()
+            TerminalIdentity.Shizuku -> BackendAvailability.Unavailable(
                 TerminalFailure.BackendUnavailable(
-                    identity = TerminalIdentity.SHIZUKU,
+                    identity = TerminalIdentity.Shizuku,
                     message = "libsu backend does not support SHIZUKU",
                 ),
             )
@@ -28,14 +28,14 @@ class LibsuPrivilegeProvider internal constructor(
             LibsuRootAccessResult.Available -> BackendAvailability.Available
             is LibsuRootAccessResult.Unavailable -> BackendAvailability.Unavailable(
                 TerminalFailure.BackendUnavailable(
-                    identity = TerminalIdentity.ROOT,
+                    identity = TerminalIdentity.Su,
                     message = result.message ?: "Root access is not available",
                 ),
             )
 
             is LibsuRootAccessResult.Unauthorized -> BackendAvailability.Unauthorized(
                 TerminalFailure.AuthorizationDenied(
-                    identity = TerminalIdentity.ROOT,
+                    identity = TerminalIdentity.Su,
                     message = result.message ?: "Root authorization was denied",
                 ),
             )

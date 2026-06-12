@@ -15,7 +15,7 @@ class LibsuPrivilegeProviderTest {
         val checker = FakeRootAccessChecker(LibsuRootAccessResult.Unavailable("no root"))
         val provider = LibsuPrivilegeProvider(checker)
 
-        val result = provider.getAvailability(TerminalIdentity.USER)
+        val result = provider.getAvailability(TerminalIdentity.User)
 
         assertEquals(BackendAvailability.Available, result)
         assertEquals(0, checker.checkCallCount)
@@ -27,11 +27,11 @@ class LibsuPrivilegeProviderTest {
             FakeRootAccessChecker(LibsuRootAccessResult.Unavailable("root missing")),
         )
 
-        val result = provider.getAvailability(TerminalIdentity.ROOT)
+        val result = provider.getAvailability(TerminalIdentity.Su)
 
         val unavailable = assertIs<BackendAvailability.Unavailable>(result)
         val failure = assertIs<TerminalFailure.BackendUnavailable>(unavailable.failure)
-        assertEquals(TerminalIdentity.ROOT, failure.identity)
+        assertEquals(TerminalIdentity.Su, failure.identity)
         assertEquals("root missing", failure.message)
     }
 
@@ -41,11 +41,11 @@ class LibsuPrivilegeProviderTest {
             FakeRootAccessChecker(LibsuRootAccessResult.Unauthorized("user denied")),
         )
 
-        val result = provider.getAvailability(TerminalIdentity.ROOT)
+        val result = provider.getAvailability(TerminalIdentity.Su)
 
         val unauthorized = assertIs<BackendAvailability.Unauthorized>(result)
         val failure = assertIs<TerminalFailure.AuthorizationDenied>(unauthorized.failure)
-        assertEquals(TerminalIdentity.ROOT, failure.identity)
+        assertEquals(TerminalIdentity.Su, failure.identity)
         assertEquals("user denied", failure.message)
     }
 
@@ -54,7 +54,7 @@ class LibsuPrivilegeProviderTest {
         val checker = FakeRootAccessChecker(LibsuRootAccessResult.Available)
         val provider = LibsuPrivilegeProvider(checker)
 
-        val result = provider.getAvailability(TerminalIdentity.ROOT)
+        val result = provider.getAvailability(TerminalIdentity.Su)
 
         assertEquals(BackendAvailability.Available, result)
         assertEquals(1, checker.checkCallCount)
@@ -65,11 +65,11 @@ class LibsuPrivilegeProviderTest {
         val checker = FakeRootAccessChecker(LibsuRootAccessResult.Available)
         val provider = LibsuPrivilegeProvider(checker)
 
-        val result = provider.getAvailability(TerminalIdentity.SHIZUKU)
+        val result = provider.getAvailability(TerminalIdentity.Shizuku)
 
         val unavailable = assertIs<BackendAvailability.Unavailable>(result)
         val failure = assertIs<TerminalFailure.BackendUnavailable>(unavailable.failure)
-        assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
+        assertEquals(TerminalIdentity.Shizuku, failure.identity)
         assertEquals("libsu backend does not support SHIZUKU", failure.message)
         assertEquals(0, checker.checkCallCount)
     }

@@ -17,19 +17,19 @@ internal class RuntimeBackendFactory(
 
     internal fun create(identity: TerminalIdentity): TerminalBackend {
         return when (identity) {
-            TerminalIdentity.USER -> LibsuTerminalBackend(
-                identity = TerminalIdentity.USER,
+            TerminalIdentity.User -> LibsuTerminalBackend(
+                identity = TerminalIdentity.User,
                 clock = clock,
                 scope = scope,
             )
 
-            TerminalIdentity.ROOT -> LibsuTerminalBackend(
-                identity = TerminalIdentity.ROOT,
+            TerminalIdentity.Su -> LibsuTerminalBackend(
+                identity = TerminalIdentity.Su,
                 clock = clock,
                 scope = scope,
             )
 
-            TerminalIdentity.SHIZUKU -> ShizukuTerminalBackend(
+            TerminalIdentity.Shizuku -> ShizukuTerminalBackend(
                 context = appContext,
                 clock = clock,
                 scope = scope,

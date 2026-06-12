@@ -12,10 +12,10 @@ internal class RuntimePrivilegeProvider(
 ) : PrivilegeProvider {
     override suspend fun getAvailability(identity: TerminalIdentity): BackendAvailability {
         return when (identity) {
-            TerminalIdentity.USER,
-            TerminalIdentity.ROOT -> libsuProvider.getAvailability(identity)
+            TerminalIdentity.User,
+            TerminalIdentity.Su -> libsuProvider.getAvailability(identity)
 
-            TerminalIdentity.SHIZUKU -> shizukuProvider.getAvailability(identity)
+            TerminalIdentity.Shizuku -> shizukuProvider.getAvailability(identity)
         }
     }
 }

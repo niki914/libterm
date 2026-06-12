@@ -28,36 +28,36 @@ class RuntimeManagerWiringTest {
     @Test
     fun `backend start failure is returned without wrapping`() = runTest {
         val startupFailure = TerminalFailure.StartupFailed(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             message = "boom",
         )
         val factory = RecordingBackendFactory(startupFailure)
         val manager = createManager(factory)
 
-        val result = manager.open(TerminalIdentity.ROOT)
+        val result = manager.open(TerminalIdentity.Su)
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertSame(startupFailure, failure.failure)
-        assertEquals(mapOf(TerminalIdentity.ROOT to 1), factory.createCounts)
+        assertEquals(mapOf(TerminalIdentity.Su to 1), factory.createCounts)
         assertTrue(manager.list().isEmpty())
     }
 
     @Test
     fun `shizuku startup failure does not create user or root fallback backends`() = runTest {
         val startupFailure = TerminalFailure.StartupFailed(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             message = "shizuku failed",
         )
         val factory = RecordingBackendFactory(startupFailure)
         val manager = createManager(factory)
 
-        val result = manager.open(TerminalIdentity.SHIZUKU)
+        val result = manager.open(TerminalIdentity.Shizuku)
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertSame(startupFailure, failure.failure)
-        assertEquals(1, factory.createCount(TerminalIdentity.SHIZUKU))
-        assertEquals(0, factory.createCount(TerminalIdentity.USER))
-        assertEquals(0, factory.createCount(TerminalIdentity.ROOT))
+        assertEquals(1, factory.createCount(TerminalIdentity.Shizuku))
+        assertEquals(0, factory.createCount(TerminalIdentity.User))
+        assertEquals(0, factory.createCount(TerminalIdentity.Su))
         assertTrue(manager.list().isEmpty())
     }
 

@@ -15,9 +15,9 @@ class ShizukuPrivilegeProvider internal constructor(
 
     override suspend fun getAvailability(identity: TerminalIdentity): BackendAvailability {
         return when (identity) {
-            TerminalIdentity.SHIZUKU -> getShizukuAvailability()
-            TerminalIdentity.USER,
-            TerminalIdentity.ROOT -> BackendAvailability.Unavailable(
+            TerminalIdentity.Shizuku -> getShizukuAvailability()
+            TerminalIdentity.User,
+            TerminalIdentity.Su -> BackendAvailability.Unavailable(
                 TerminalFailure.BackendUnavailable(
                     identity = identity,
                     message = "Shizuku backend only supports SHIZUKU",
@@ -30,14 +30,14 @@ class ShizukuPrivilegeProvider internal constructor(
         return when (accessChecker.checkAccess()) {
             ShizukuAccessState.NotInstalledOrNotRunning -> BackendAvailability.Unavailable(
                 TerminalFailure.BackendUnavailable(
-                    identity = TerminalIdentity.SHIZUKU,
+                    identity = TerminalIdentity.Shizuku,
                     message = "Shizuku is not installed or not running",
                 ),
             )
 
             ShizukuAccessState.Unauthorized -> BackendAvailability.Unauthorized(
                 TerminalFailure.AuthorizationDenied(
-                    identity = TerminalIdentity.SHIZUKU,
+                    identity = TerminalIdentity.Shizuku,
                     message = "Shizuku authorization was denied",
                 ),
             )

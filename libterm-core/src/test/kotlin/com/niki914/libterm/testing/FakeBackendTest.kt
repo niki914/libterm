@@ -28,7 +28,7 @@ class FakeBackendTest {
     @Test
     fun `emit output keeps order stream and clock timestamp`() = runTest {
         val clock = FakeClock(initialMillis = 100L)
-        val backend = FakeBackend(identity = TerminalIdentity.USER, clock = clock)
+        val backend = FakeBackend(identity = TerminalIdentity.User, clock = clock)
         val outputs = mutableListOf<OutputChunk>()
 
         backgroundScope.async(UnconfinedTestDispatcher(testScheduler)) {
@@ -76,7 +76,7 @@ class FakeBackendTest {
 
     @Test
     fun `emit before collect is preserved for later subscriber`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
 
         assertTrue(backend.emitStdout(bytesOf("queued-1")))
         assertTrue(backend.emitStderr(bytesOf("queued-2")))
@@ -106,7 +106,7 @@ class FakeBackendTest {
 
     @Test
     fun `start and send record observable behavior for tests`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.ROOT)
+        val backend = FakeBackend(identity = TerminalIdentity.Su)
 
         val result = backend.start()
         assertEquals(SendResult.Sent, backend.send(bytesOf("pwd\n")))
@@ -119,7 +119,7 @@ class FakeBackendTest {
 
     @Test
     fun `emit preserves non utf8 bytes`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
         val nonUtf8 = TerminalBytes.of(byteArrayOf(0xC3.toByte()))
 
         assertTrue(backend.emitStdout(nonUtf8))
@@ -131,9 +131,9 @@ class FakeBackendTest {
 
     @Test
     fun `fail on start returns configured failure until cleared`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.SHIZUKU)
+        val backend = FakeBackend(identity = TerminalIdentity.Shizuku)
         val failure = TerminalFailure.StartupFailed(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             message = "binder missing",
         )
 
@@ -150,7 +150,7 @@ class FakeBackendTest {
 
     @Test
     fun `close without hold completes immediately and send after close fails`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
 
         backend.close()
 
@@ -166,7 +166,7 @@ class FakeBackendTest {
 
     @Test
     fun `await exit resumes with configured terminal result`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.ROOT)
+        val backend = FakeBackend(identity = TerminalIdentity.Su)
         val awaiting = backgroundScope.async { backend.awaitExit() }
         runCurrent()
 
@@ -177,10 +177,10 @@ class FakeBackendTest {
         assertNull(awaiting.await())
 
         val failure = TerminalFailure.RuntimeTerminated(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             message = "session crashed",
         )
-        val failedBackend = FakeBackend(identity = TerminalIdentity.ROOT)
+        val failedBackend = FakeBackend(identity = TerminalIdentity.Su)
         val failedAwaiting = backgroundScope.async { failedBackend.awaitExit() }
         runCurrent()
         failedBackend.terminateWithFailure(failure)
@@ -191,7 +191,7 @@ class FakeBackendTest {
 
     @Test
     fun `close can be held and repeated close stays safe`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
         backend.holdCloseUntilCompleted()
 
         val firstClose = backgroundScope.async { backend.close() }

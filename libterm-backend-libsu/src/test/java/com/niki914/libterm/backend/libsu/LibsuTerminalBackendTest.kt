@@ -32,7 +32,7 @@ class LibsuTerminalBackendTest {
         val session = FakeLibsuShellSession()
         adapterFactory.nextSession = session
         val backend = createBackend(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             adapterFactory = adapterFactory,
         )
 
@@ -40,7 +40,7 @@ class LibsuTerminalBackendTest {
         backend.close()
 
         assertEquals(BackendStartResult.Started, result)
-        assertEquals(listOf(TerminalIdentity.USER), adapterFactory.openedIdentities)
+        assertEquals(listOf(TerminalIdentity.User), adapterFactory.openedIdentities)
         assertEquals(1, session.closeCallCount)
     }
 
@@ -49,7 +49,7 @@ class LibsuTerminalBackendTest {
         val startupError = IllegalStateException("su shell failed")
         val adapterFactory = FakeLibsuShellAdapterFactory(startupError = startupError)
         val backend = createBackend(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             adapterFactory = adapterFactory,
         )
 
@@ -57,10 +57,10 @@ class LibsuTerminalBackendTest {
 
         val failed = assertIs<BackendStartResult.Failed>(result)
         val failure = assertIs<TerminalFailure.StartupFailed>(failed.failure)
-        assertEquals(TerminalIdentity.ROOT, failure.identity)
+        assertEquals(TerminalIdentity.Su, failure.identity)
         assertEquals("su shell failed", failure.message)
         assertEquals(startupError, failure.cause)
-        assertEquals(listOf(TerminalIdentity.ROOT), adapterFactory.openedIdentities)
+        assertEquals(listOf(TerminalIdentity.Su), adapterFactory.openedIdentities)
     }
 
     @Test
@@ -68,7 +68,7 @@ class LibsuTerminalBackendTest {
         val clock = FakeClock(initialMillis = 100L)
         val session = FakeLibsuShellSession()
         val backend = createBackend(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             clock = clock,
             adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
         )
@@ -105,7 +105,7 @@ class LibsuTerminalBackendTest {
     fun `send forwards raw input without appending newline`() = runTest {
         val session = FakeLibsuShellSession()
         val backend = createBackend(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
         )
 
@@ -121,7 +121,7 @@ class LibsuTerminalBackendTest {
     fun `non utf8 bytes are preserved`() = runTest {
         val session = FakeLibsuShellSession()
         val backend = createBackend(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
         )
         val nonUtf8 = TerminalBytes.of(byteArrayOf(0xC3.toByte()))
@@ -151,7 +151,7 @@ class LibsuTerminalBackendTest {
     fun `ansi escape bytes are preserved`() = runTest {
         val session = FakeLibsuShellSession()
         val backend = createBackend(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
         )
         val ansi = TerminalBytes.of(byteArrayOf(0x1B, 0x5B, 0x33, 0x31, 0x6D))
@@ -174,14 +174,14 @@ class LibsuTerminalBackendTest {
     @Test
     fun `write failure maps to SendResult Failed`() = runTest {
         val failure = TerminalFailure.RuntimeTerminated(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             message = "write failed",
         )
         val session = FakeLibsuShellSession().apply {
             failWritesWith(failure)
         }
         val backend = createBackend(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
         )
 
@@ -194,14 +194,14 @@ class LibsuTerminalBackendTest {
     @Test
     fun `send returns failed when startup gate failure happens`() = runTest {
         val failure = TerminalFailure.RuntimeTerminated(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             message = "stdin startup gate failed",
         )
         val session = FakeLibsuShellSession().apply {
             failStartupGateWith(failure)
         }
         val backend = createBackend(
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
         )
 
@@ -215,7 +215,7 @@ class LibsuTerminalBackendTest {
     fun `close is idempotent and releases session once`() = runTest {
         val session = FakeLibsuShellSession()
         val backend = createBackend(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
         )
 
@@ -229,12 +229,12 @@ class LibsuTerminalBackendTest {
     @Test
     fun `await exit returns runtime failure from session`() = runTest {
         val failure = TerminalFailure.RuntimeTerminated(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             message = "shell died",
         )
         val session = FakeLibsuShellSession(exitFailure = failure)
         val backend = createBackend(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             adapterFactory = FakeLibsuShellAdapterFactory(nextSession = session),
         )
 

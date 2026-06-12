@@ -32,7 +32,8 @@ class AdbCommandReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                val identityName = intent.getStringExtra(EXTRA_IDENTITY)?.uppercase() ?: IDENTITY_USER
+                val identityName =
+                    intent.getStringExtra(EXTRA_IDENTITY)?.uppercase() ?: IDENTITY_USER
                 val timeoutMillis = intent.getIntExtra(EXTRA_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)
                     .toLong()
                     .coerceAtLeast(0L)
@@ -57,7 +58,8 @@ class AdbCommandReceiver : BroadcastReceiver() {
                     is TermResult.Failure -> {
                         pendingResult.resultCode = RESULT_EXEC_FAILURE
                         pendingResult.resultData = errorJson(
-                            message = execResult.failure.message ?: execResult.failure.javaClass.simpleName,
+                            message = execResult.failure.message
+                                ?: execResult.failure.javaClass.simpleName,
                             failure = execResult.failure,
                             identity = identityName,
                             command = command,

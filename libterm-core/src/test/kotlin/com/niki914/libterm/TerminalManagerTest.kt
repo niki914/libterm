@@ -28,16 +28,16 @@ class TerminalManagerTest {
     fun `open user success returns registered session`() = runTest {
         val fixture = createFixture()
 
-        val result = fixture.manager.open(TerminalIdentity.USER)
+        val result = fixture.manager.open(TerminalIdentity.User)
 
         val success = assertIs<OpenResult.Success<TerminalSession>>(result)
         val session = success.value
         assertEquals("session-1", session.id)
-        assertEquals(TerminalIdentity.USER, session.identity)
+        assertEquals(TerminalIdentity.User, session.identity)
         assertEquals(SessionState.Running, session.currentState)
         assertSame(session, fixture.manager.get(session.id))
         assertEquals(listOf(session), fixture.manager.list())
-        assertEquals(listOf(TerminalIdentity.USER), fixture.requestedIdentities)
+        assertEquals(listOf(TerminalIdentity.User), fixture.requestedIdentities)
         assertEquals(1, fixture.backend(0).startCallCount)
 
         fixture.finishAllBackends()
@@ -47,14 +47,14 @@ class TerminalManagerTest {
     @Test
     fun `open root unavailable returns backend unavailable failure`() = runTest {
         val fixture = createFixture()
-        fixture.provider.setUnavailable(TerminalIdentity.ROOT, message = "root missing")
+        fixture.provider.setUnavailable(TerminalIdentity.Su, message = "root missing")
 
-        val result = fixture.manager.open(TerminalIdentity.ROOT)
+        val result = fixture.manager.open(TerminalIdentity.Su)
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertEquals(
             TerminalFailure.BackendUnavailable(
-                identity = TerminalIdentity.ROOT,
+                identity = TerminalIdentity.Su,
                 message = "root missing",
             ),
             failure.failure,
@@ -67,17 +67,17 @@ class TerminalManagerTest {
     @Test
     fun `open unauthorized returns authorization denied failure`() = runTest {
         val fixture = createFixture()
-        fixture.provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
+        fixture.provider.setUnauthorized(TerminalIdentity.Shizuku, message = "permission denied")
 
         val result = fixture.manager.open(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             authorizationMode = AuthorizationMode.CHECK_ONLY,
         )
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertEquals(
             TerminalFailure.AuthorizationDenied(
-                identity = TerminalIdentity.SHIZUKU,
+                identity = TerminalIdentity.Shizuku,
                 message = "permission denied",
             ),
             failure.failure,
@@ -89,17 +89,17 @@ class TerminalManagerTest {
     @Test
     fun `open check only does not request authorization`() = runTest {
         val fixture = createFixture()
-        fixture.provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
+        fixture.provider.setUnauthorized(TerminalIdentity.Shizuku, message = "permission denied")
 
         val result = fixture.manager.open(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             authorizationMode = AuthorizationMode.CHECK_ONLY,
         )
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertEquals(
             TerminalFailure.AuthorizationDenied(
-                identity = TerminalIdentity.SHIZUKU,
+                identity = TerminalIdentity.Shizuku,
                 message = "permission denied",
             ),
             failure.failure,
@@ -111,15 +111,15 @@ class TerminalManagerTest {
     @Test
     fun `open defaults to request authorization and opens after grant`() = runTest {
         val fixture = createFixture()
-        fixture.provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
-        fixture.authorizer.setGranted(TerminalIdentity.SHIZUKU)
+        fixture.provider.setUnauthorized(TerminalIdentity.Shizuku, message = "permission denied")
+        fixture.authorizer.setGranted(TerminalIdentity.Shizuku)
 
-        val result = fixture.manager.open(TerminalIdentity.SHIZUKU)
+        val result = fixture.manager.open(TerminalIdentity.Shizuku)
 
         val session = assertSuccess(result)
-        assertEquals(TerminalIdentity.SHIZUKU, session.identity)
-        assertEquals(listOf(TerminalIdentity.SHIZUKU), fixture.authorizer.requestedIdentities)
-        assertEquals(listOf(TerminalIdentity.SHIZUKU), fixture.requestedIdentities)
+        assertEquals(TerminalIdentity.Shizuku, session.identity)
+        assertEquals(listOf(TerminalIdentity.Shizuku), fixture.authorizer.requestedIdentities)
+        assertEquals(listOf(TerminalIdentity.Shizuku), fixture.requestedIdentities)
 
         fixture.finishAllBackends()
         advanceUntilIdle()
@@ -128,23 +128,23 @@ class TerminalManagerTest {
     @Test
     fun `open request if needed returns denied result without creating session`() = runTest {
         val fixture = createFixture()
-        fixture.provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
-        fixture.authorizer.setDenied(TerminalIdentity.SHIZUKU, message = "user denied")
+        fixture.provider.setUnauthorized(TerminalIdentity.Shizuku, message = "permission denied")
+        fixture.authorizer.setDenied(TerminalIdentity.Shizuku, message = "user denied")
 
         val result = fixture.manager.open(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             authorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
         )
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertEquals(
             TerminalFailure.AuthorizationDenied(
-                identity = TerminalIdentity.SHIZUKU,
+                identity = TerminalIdentity.Shizuku,
                 message = "user denied",
             ),
             failure.failure,
         )
-        assertEquals(listOf(TerminalIdentity.SHIZUKU), fixture.authorizer.requestedIdentities)
+        assertEquals(listOf(TerminalIdentity.Shizuku), fixture.authorizer.requestedIdentities)
         assertTrue(fixture.requestedIdentities.isEmpty())
         assertTrue(fixture.manager.list().isEmpty())
     }
@@ -152,16 +152,16 @@ class TerminalManagerTest {
     @Test
     fun `open available does not request authorization`() = runTest {
         val fixture = createFixture()
-        fixture.provider.setAvailable(TerminalIdentity.SHIZUKU)
+        fixture.provider.setAvailable(TerminalIdentity.Shizuku)
 
         val result = fixture.manager.open(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             authorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
         )
 
         assertSuccess(result)
         assertTrue(fixture.authorizer.requestedIdentities.isEmpty())
-        assertEquals(listOf(TerminalIdentity.SHIZUKU), fixture.requestedIdentities)
+        assertEquals(listOf(TerminalIdentity.Shizuku), fixture.requestedIdentities)
 
         fixture.finishAllBackends()
         advanceUntilIdle()
@@ -171,7 +171,7 @@ class TerminalManagerTest {
     fun `open backend startup failure returns explicit failure and does not register session`() =
         runTest {
             val startupFailure = TerminalFailure.StartupFailed(
-                identity = TerminalIdentity.ROOT,
+                identity = TerminalIdentity.Su,
                 message = "boom",
             )
             val fixture = createFixture { identity, clock ->
@@ -180,11 +180,11 @@ class TerminalManagerTest {
                 }
             }
 
-            val result = fixture.manager.open(TerminalIdentity.ROOT)
+            val result = fixture.manager.open(TerminalIdentity.Su)
 
             val failure = assertIs<OpenResult.Failure>(result)
             assertEquals(startupFailure, failure.failure)
-            assertEquals(listOf(TerminalIdentity.ROOT), fixture.requestedIdentities)
+            assertEquals(listOf(TerminalIdentity.Su), fixture.requestedIdentities)
             assertEquals(1, fixture.backend(0).startCallCount)
             assertTrue(fixture.manager.list().isEmpty())
             assertNull(fixture.manager.get("session-1"))
@@ -194,15 +194,15 @@ class TerminalManagerTest {
     fun `list preserves registration order and get returns matching session`() = runTest {
         val fixture = createFixture()
 
-        val first = assertSuccess(fixture.manager.open(TerminalIdentity.USER))
-        val second = assertSuccess(fixture.manager.open(TerminalIdentity.ROOT))
+        val first = assertSuccess(fixture.manager.open(TerminalIdentity.User))
+        val second = assertSuccess(fixture.manager.open(TerminalIdentity.Su))
 
         assertEquals(listOf(first, second), fixture.manager.list())
         assertSame(first, fixture.manager.get(first.id))
         assertSame(second, fixture.manager.get(second.id))
         assertEquals(listOf("session-1", "session-2"), fixture.manager.list().map { it.id })
         assertEquals(
-            listOf(TerminalIdentity.USER, TerminalIdentity.ROOT),
+            listOf(TerminalIdentity.User, TerminalIdentity.Su),
             fixture.requestedIdentities,
         )
 
@@ -213,7 +213,7 @@ class TerminalManagerTest {
     @Test
     fun `close existing removes session after closing backend`() = runTest {
         val fixture = createFixture()
-        val session = assertSuccess(fixture.manager.open(TerminalIdentity.USER))
+        val session = assertSuccess(fixture.manager.open(TerminalIdentity.User))
         val backend = fixture.backend(0)
 
         val closeResult = backgroundScope.async { fixture.manager.close(session.id) }
@@ -244,7 +244,7 @@ class TerminalManagerTest {
     @Test
     fun `repeated close is safe after session removal`() = runTest {
         val fixture = createFixture()
-        val session = assertSuccess(fixture.manager.open(TerminalIdentity.USER))
+        val session = assertSuccess(fixture.manager.open(TerminalIdentity.User))
         val backend = fixture.backend(0)
 
         val firstClose = backgroundScope.async { fixture.manager.close(session.id) }
@@ -261,30 +261,30 @@ class TerminalManagerTest {
     @Test
     fun `open failure does not fallback to another identity`() = runTest {
         val startupFailure = TerminalFailure.StartupFailed(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             message = "root boot failed",
         )
         val fixture = createFixture { identity, clock ->
             FakeBackend(identity = identity, clock = clock).apply {
-                if (identity == TerminalIdentity.ROOT) {
+                if (identity == TerminalIdentity.Su) {
                     failOnStart(startupFailure)
                 }
             }
         }
 
-        val result = fixture.manager.open(TerminalIdentity.ROOT)
+        val result = fixture.manager.open(TerminalIdentity.Su)
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertEquals(startupFailure, failure.failure)
-        assertEquals(listOf(TerminalIdentity.ROOT), fixture.requestedIdentities)
+        assertEquals(listOf(TerminalIdentity.Su), fixture.requestedIdentities)
         assertTrue(fixture.manager.list().isEmpty())
     }
 
     @Test
     fun `different sessions do not share output buffers`() = runTest {
         val fixture = createFixture()
-        val first = assertSuccess(fixture.manager.open(TerminalIdentity.USER))
-        val second = assertSuccess(fixture.manager.open(TerminalIdentity.USER))
+        val first = assertSuccess(fixture.manager.open(TerminalIdentity.User))
+        val second = assertSuccess(fixture.manager.open(TerminalIdentity.User))
         val firstBackend = fixture.backend(0)
         val secondBackend = fixture.backend(1)
 

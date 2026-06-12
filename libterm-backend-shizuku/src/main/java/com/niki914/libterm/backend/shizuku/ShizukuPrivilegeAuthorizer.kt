@@ -25,7 +25,7 @@ class ShizukuPrivilegeAuthorizer internal constructor(
     )
 
     override suspend fun requestAuthorization(identity: TerminalIdentity): AuthorizationResult {
-        if (identity != TerminalIdentity.SHIZUKU) {
+        if (identity != TerminalIdentity.Shizuku) {
             return AuthorizationResult.Unavailable(
                 TerminalFailure.BackendUnavailable(
                     identity = identity,
@@ -48,7 +48,7 @@ class ShizukuPrivilegeAuthorizer internal constructor(
         if (!permissionRequester.isBinderAlive()) {
             return AuthorizationResult.Unavailable(
                 TerminalFailure.BackendUnavailable(
-                    identity = TerminalIdentity.SHIZUKU,
+                    identity = TerminalIdentity.Shizuku,
                     message = "Shizuku is not installed or not running",
                 ),
             )
@@ -85,7 +85,7 @@ class ShizukuPrivilegeAuthorizer internal constructor(
                     } else {
                         AuthorizationResult.Denied(
                             TerminalFailure.AuthorizationDenied(
-                                identity = TerminalIdentity.SHIZUKU,
+                                identity = TerminalIdentity.Shizuku,
                                 message = "Shizuku authorization was denied",
                             ),
                         )
@@ -115,7 +115,7 @@ class ShizukuPrivilegeAuthorizer internal constructor(
     ): AuthorizationResult.Failed {
         return AuthorizationResult.Failed(
             TerminalFailure.AuthorizationFailed(
-                identity = TerminalIdentity.SHIZUKU,
+                identity = TerminalIdentity.Shizuku,
                 message = message,
                 cause = cause,
             ),

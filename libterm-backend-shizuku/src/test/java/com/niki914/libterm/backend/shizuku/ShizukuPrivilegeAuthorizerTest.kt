@@ -23,7 +23,7 @@ class ShizukuPrivilegeAuthorizerTest {
         val requester = FakeShizukuPermissionRequester(permissionGranted = true)
         val authorizer = createAuthorizer(requester)
 
-        val result = authorizer.requestAuthorization(TerminalIdentity.SHIZUKU)
+        val result = authorizer.requestAuthorization(TerminalIdentity.Shizuku)
 
         assertEquals(AuthorizationResult.Granted, result)
         assertTrue(requester.requestedCodes.isEmpty())
@@ -35,10 +35,10 @@ class ShizukuPrivilegeAuthorizerTest {
         val requester = FakeShizukuPermissionRequester(binderAlive = false)
         val authorizer = createAuthorizer(requester)
 
-        val result = authorizer.requestAuthorization(TerminalIdentity.SHIZUKU)
+        val result = authorizer.requestAuthorization(TerminalIdentity.Shizuku)
 
         val unavailable = assertIs<AuthorizationResult.Unavailable>(result)
-        assertEquals(TerminalIdentity.SHIZUKU, unavailable.failure.identity)
+        assertEquals(TerminalIdentity.Shizuku, unavailable.failure.identity)
         assertEquals("Shizuku is not installed or not running", unavailable.failure.message)
         assertTrue(requester.requestedCodes.isEmpty())
     }
@@ -48,7 +48,7 @@ class ShizukuPrivilegeAuthorizerTest {
         val requester = FakeShizukuPermissionRequester()
         val authorizer = createAuthorizer(requester)
 
-        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.SHIZUKU) }
+        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.Shizuku) }
         runCurrent()
 
         assertEquals(listOf(42), requester.requestedCodes)
@@ -66,14 +66,14 @@ class ShizukuPrivilegeAuthorizerTest {
         val requester = FakeShizukuPermissionRequester()
         val authorizer = createAuthorizer(requester)
 
-        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.SHIZUKU) }
+        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.Shizuku) }
         runCurrent()
 
         requester.dispatchResult(requestCode = 42, granted = false)
         runCurrent()
 
         val denied = assertIs<AuthorizationResult.Denied>(deferred.await())
-        assertEquals(TerminalIdentity.SHIZUKU, denied.failure.identity)
+        assertEquals(TerminalIdentity.Shizuku, denied.failure.identity)
         assertEquals("Shizuku authorization was denied", denied.failure.message)
         assertTrue(requester.listeners.isEmpty())
     }
@@ -83,7 +83,7 @@ class ShizukuPrivilegeAuthorizerTest {
         val requester = FakeShizukuPermissionRequester()
         val authorizer = createAuthorizer(requester)
 
-        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.SHIZUKU) }
+        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.Shizuku) }
         runCurrent()
 
         assertEquals(1, requester.listeners.size)
@@ -99,10 +99,10 @@ class ShizukuPrivilegeAuthorizerTest {
         val requester = FakeShizukuPermissionRequester(permissionGranted = true)
         val authorizer = createAuthorizer(requester)
 
-        val result = authorizer.requestAuthorization(TerminalIdentity.USER)
+        val result = authorizer.requestAuthorization(TerminalIdentity.User)
 
         val unavailable = assertIs<AuthorizationResult.Unavailable>(result)
-        assertEquals(TerminalIdentity.USER, unavailable.failure.identity)
+        assertEquals(TerminalIdentity.User, unavailable.failure.identity)
         assertEquals("Shizuku authorizer only supports SHIZUKU", unavailable.failure.message)
         assertTrue(requester.requestedCodes.isEmpty())
     }
@@ -112,62 +112,64 @@ class ShizukuPrivilegeAuthorizerTest {
         val requester = FakeShizukuPermissionRequester(requestError = IllegalStateException("boom"))
         val authorizer = createAuthorizer(requester)
 
-        val result = authorizer.requestAuthorization(TerminalIdentity.SHIZUKU)
+        val result = authorizer.requestAuthorization(TerminalIdentity.Shizuku)
 
         val failed = assertIs<AuthorizationResult.Failed>(result)
         val failure = assertIs<TerminalFailure.AuthorizationFailed>(failed.failure)
-        assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
+        assertEquals(TerminalIdentity.Shizuku, failure.identity)
         assertEquals("boom", failure.message)
         assertTrue(requester.listeners.isEmpty())
     }
 
     @Test
-    fun `timeout without callback and final recheck false returns authorization failed and removes listener`() = runTest {
-        val timeoutMillis = 1_000L
-        val requester = FakeShizukuPermissionRequester()
-        val authorizer = createAuthorizer(
-            requester = requester,
-            requestTimeoutMillis = timeoutMillis,
-        )
+    fun `timeout without callback and final recheck false returns authorization failed and removes listener`() =
+        runTest {
+            val timeoutMillis = 1_000L
+            val requester = FakeShizukuPermissionRequester()
+            val authorizer = createAuthorizer(
+                requester = requester,
+                requestTimeoutMillis = timeoutMillis,
+            )
 
-        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.SHIZUKU) }
-        runCurrent()
+            val deferred = async { authorizer.requestAuthorization(TerminalIdentity.Shizuku) }
+            runCurrent()
 
-        assertEquals(listOf(42), requester.requestedCodes)
-        assertEquals(1, requester.listeners.size)
+            assertEquals(listOf(42), requester.requestedCodes)
+            assertEquals(1, requester.listeners.size)
 
-        advanceTimeBy(timeoutMillis)
-        runCurrent()
+            advanceTimeBy(timeoutMillis)
+            runCurrent()
 
-        val failed = assertIs<AuthorizationResult.Failed>(deferred.await())
-        val failure = assertIs<TerminalFailure.AuthorizationFailed>(failed.failure)
-        assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
-        assertEquals("Timed out waiting for Shizuku authorization result", failure.message)
-        assertTrue(requester.listeners.isEmpty())
-    }
+            val failed = assertIs<AuthorizationResult.Failed>(deferred.await())
+            val failure = assertIs<TerminalFailure.AuthorizationFailed>(failed.failure)
+            assertEquals(TerminalIdentity.Shizuku, failure.identity)
+            assertEquals("Timed out waiting for Shizuku authorization result", failure.message)
+            assertTrue(requester.listeners.isEmpty())
+        }
 
     @Test
-    fun `timeout without callback but final recheck true returns granted and removes listener`() = runTest {
-        val timeoutMillis = 1_000L
-        val requester = FakeShizukuPermissionRequester()
-        val authorizer = createAuthorizer(
-            requester = requester,
-            requestTimeoutMillis = timeoutMillis,
-        )
+    fun `timeout without callback but final recheck true returns granted and removes listener`() =
+        runTest {
+            val timeoutMillis = 1_000L
+            val requester = FakeShizukuPermissionRequester()
+            val authorizer = createAuthorizer(
+                requester = requester,
+                requestTimeoutMillis = timeoutMillis,
+            )
 
-        val deferred = async { authorizer.requestAuthorization(TerminalIdentity.SHIZUKU) }
-        runCurrent()
+            val deferred = async { authorizer.requestAuthorization(TerminalIdentity.Shizuku) }
+            runCurrent()
 
-        assertEquals(listOf(42), requester.requestedCodes)
-        assertEquals(1, requester.listeners.size)
+            assertEquals(listOf(42), requester.requestedCodes)
+            assertEquals(1, requester.listeners.size)
 
-        requester.permissionGranted = true
-        advanceTimeBy(timeoutMillis)
-        runCurrent()
+            requester.permissionGranted = true
+            advanceTimeBy(timeoutMillis)
+            runCurrent()
 
-        assertEquals(AuthorizationResult.Granted, deferred.await())
-        assertTrue(requester.listeners.isEmpty())
-    }
+            assertEquals(AuthorizationResult.Granted, deferred.await())
+            assertTrue(requester.listeners.isEmpty())
+        }
 
     private fun createAuthorizer(
         requester: FakeShizukuPermissionRequester,

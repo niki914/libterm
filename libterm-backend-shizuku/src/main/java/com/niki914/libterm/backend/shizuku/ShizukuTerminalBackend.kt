@@ -40,7 +40,7 @@ class ShizukuTerminalBackend internal constructor(
         clientFactory = RealShizukuShellClientFactory(context),
     )
 
-    override val identity: TerminalIdentity = TerminalIdentity.SHIZUKU
+    override val identity: TerminalIdentity = TerminalIdentity.Shizuku
 
     private val lifecycleMutex = Mutex()
     private val outputChunks = MutableSharedFlow<OutputChunk>(

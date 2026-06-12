@@ -16,12 +16,12 @@ class RuntimePrivilegeAuthorizerTest {
 
     @Test
     fun `root authorization denied is preserved and does not call shizuku authorizer`() = runTest {
-        val rootFailure = TerminalFailure.AuthorizationDenied(
-            identity = TerminalIdentity.ROOT,
+        val suFailure = TerminalFailure.AuthorizationDenied(
+            identity = TerminalIdentity.Su,
             message = "root denied",
         )
         val libsuProvider = RecordingPrivilegeProvider(
-            BackendAvailability.Unauthorized(rootFailure),
+            BackendAvailability.Unauthorized(suFailure),
         )
         val shizukuAuthorizer = RecordingAuthorizer(AuthorizationResult.Granted)
         val authorizer = RuntimePrivilegeAuthorizer(
@@ -29,18 +29,18 @@ class RuntimePrivilegeAuthorizerTest {
             shizukuAuthorizer = shizukuAuthorizer,
         )
 
-        val result = authorizer.requestAuthorization(TerminalIdentity.ROOT)
+        val result = authorizer.requestAuthorization(TerminalIdentity.Su)
 
         val denied = result as AuthorizationResult.Denied
-        assertSame(rootFailure, denied.failure)
-        assertEquals(listOf(TerminalIdentity.ROOT), libsuProvider.calls)
+        assertSame(suFailure, denied.failure)
+        assertEquals(listOf(TerminalIdentity.Su), libsuProvider.calls)
         assertEquals(emptyList(), shizukuAuthorizer.calls)
     }
 
     @Test
     fun `shizuku authorization delegates to shizuku authorizer only`() = runTest {
         val shizukuFailure = TerminalFailure.AuthorizationDenied(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             message = "shizuku denied",
         )
         val shizukuResult = AuthorizationResult.Denied(shizukuFailure)
@@ -51,11 +51,11 @@ class RuntimePrivilegeAuthorizerTest {
             shizukuAuthorizer = shizukuAuthorizer,
         )
 
-        val result = authorizer.requestAuthorization(TerminalIdentity.SHIZUKU)
+        val result = authorizer.requestAuthorization(TerminalIdentity.Shizuku)
 
         assertSame(shizukuResult, result)
         assertEquals(emptyList(), libsuProvider.calls)
-        assertEquals(listOf(TerminalIdentity.SHIZUKU), shizukuAuthorizer.calls)
+        assertEquals(listOf(TerminalIdentity.Shizuku), shizukuAuthorizer.calls)
     }
 
     private class RecordingPrivilegeProvider(

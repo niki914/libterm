@@ -14,7 +14,7 @@ class FakeProviderTest {
     fun `returns available by default for unconfigured identity`() = runTest {
         val provider = FakeProvider()
 
-        val availability = provider.getAvailability(TerminalIdentity.USER)
+        val availability = provider.getAvailability(TerminalIdentity.User)
 
         assertEquals(BackendAvailability.Available, availability)
     }
@@ -22,14 +22,14 @@ class FakeProviderTest {
     @Test
     fun `set unavailable exposes backend unavailable failure`() = runTest {
         val provider = FakeProvider()
-        provider.setUnavailable(TerminalIdentity.ROOT, message = "su missing")
+        provider.setUnavailable(TerminalIdentity.Su, message = "su missing")
 
-        val availability = provider.getAvailability(TerminalIdentity.ROOT)
+        val availability = provider.getAvailability(TerminalIdentity.Su)
 
         val unavailable = assertIs<BackendAvailability.Unavailable>(availability)
         assertEquals(
             TerminalFailure.BackendUnavailable(
-                identity = TerminalIdentity.ROOT,
+                identity = TerminalIdentity.Su,
                 message = "su missing",
             ),
             unavailable.failure,
@@ -39,14 +39,14 @@ class FakeProviderTest {
     @Test
     fun `set unauthorized exposes authorization denied failure`() = runTest {
         val provider = FakeProvider()
-        provider.setUnauthorized(TerminalIdentity.SHIZUKU, message = "permission denied")
+        provider.setUnauthorized(TerminalIdentity.Shizuku, message = "permission denied")
 
-        val availability = provider.getAvailability(TerminalIdentity.SHIZUKU)
+        val availability = provider.getAvailability(TerminalIdentity.Shizuku)
 
         val unauthorized = assertIs<BackendAvailability.Unauthorized>(availability)
         assertEquals(
             TerminalFailure.AuthorizationDenied(
-                identity = TerminalIdentity.SHIZUKU,
+                identity = TerminalIdentity.Shizuku,
                 message = "permission denied",
             ),
             unauthorized.failure,
@@ -56,10 +56,10 @@ class FakeProviderTest {
     @Test
     fun `set available overrides previous failure configuration`() = runTest {
         val provider = FakeProvider()
-        provider.setUnavailable(TerminalIdentity.USER, message = "offline")
-        provider.setAvailable(TerminalIdentity.USER)
+        provider.setUnavailable(TerminalIdentity.User, message = "offline")
+        provider.setAvailable(TerminalIdentity.User)
 
-        val availability = provider.getAvailability(TerminalIdentity.USER)
+        val availability = provider.getAvailability(TerminalIdentity.User)
 
         assertEquals(BackendAvailability.Available, availability)
     }

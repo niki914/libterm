@@ -24,7 +24,7 @@ class TerminalSessionTest {
 
     @Test
     fun `start success moves session to running`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -43,9 +43,9 @@ class TerminalSessionTest {
 
     @Test
     fun `start failure moves session to failed`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.ROOT)
+        val backend = FakeBackend(identity = TerminalIdentity.Su)
         val failure = TerminalFailure.StartupFailed(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             message = "boom",
         )
         backend.failOnStart(failure)
@@ -64,7 +64,7 @@ class TerminalSessionTest {
 
     @Test
     fun `latest trims old chunks by chunk count and byte count`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -100,7 +100,7 @@ class TerminalSessionTest {
     @Test
     fun `stderr chunks stay marked after buffering`() = runTest {
         val clock = FakeClock(initialMillis = 10L)
-        val backend = FakeBackend(identity = TerminalIdentity.USER, clock = clock)
+        val backend = FakeBackend(identity = TerminalIdentity.User, clock = clock)
         val session = createSession(
             backend = backend,
             clock = clock,
@@ -136,7 +136,7 @@ class TerminalSessionTest {
 
     @Test
     fun `send forwards TerminalBytes`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -154,7 +154,7 @@ class TerminalSessionTest {
 
     @Test
     fun `send byte array convenience wraps copy`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -173,7 +173,7 @@ class TerminalSessionTest {
 
     @Test
     fun `send after close returns already closed failure`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.SHIZUKU)
+        val backend = FakeBackend(identity = TerminalIdentity.Shizuku)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -192,14 +192,14 @@ class TerminalSessionTest {
 
         val failed = assertIs<SendResult.Failed>(session.send(bytesOf("id\n")))
         val failure = assertIs<TerminalFailure.AlreadyClosed>(failed.failure)
-        assertEquals(TerminalIdentity.SHIZUKU, failure.identity)
+        assertEquals(TerminalIdentity.Shizuku, failure.identity)
         assertEquals("Session is not running", failure.message)
         assertTrue(backend.writes.isEmpty())
     }
 
     @Test
     fun `send backend exception returns runtime terminated failure`() = runTest {
-        val backend = ThrowingSendBackend(identity = TerminalIdentity.ROOT)
+        val backend = ThrowingSendBackend(identity = TerminalIdentity.Su)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -210,7 +210,7 @@ class TerminalSessionTest {
 
         val failed = assertIs<SendResult.Failed>(session.send(bytesOf("id\n")))
         val failure = assertIs<TerminalFailure.RuntimeTerminated>(failed.failure)
-        assertEquals(TerminalIdentity.ROOT, failure.identity)
+        assertEquals(TerminalIdentity.Su, failure.identity)
         assertEquals("send failed", failure.message)
         assertEquals(SessionState.Failed(failure), session.currentState)
 
@@ -220,11 +220,11 @@ class TerminalSessionTest {
     @Test
     fun `send backend failed result moves session to failed`() = runTest {
         val failure = TerminalFailure.RuntimeTerminated(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             message = "write failed",
         )
         val backend = FailedSendBackend(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             failure = failure,
         )
         val session = createSession(
@@ -243,7 +243,7 @@ class TerminalSessionTest {
 
     @Test
     fun `close before start is a no-op and does not block later start`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -263,14 +263,14 @@ class TerminalSessionTest {
 
     @Test
     fun `await exit failure moves session to failed`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.ROOT)
+        val backend = FakeBackend(identity = TerminalIdentity.Su)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
             scheduler = testScheduler,
         )
         val failure = TerminalFailure.RuntimeTerminated(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             message = "pty died",
         )
 
@@ -285,7 +285,7 @@ class TerminalSessionTest {
 
     @Test
     fun `close requested while start is pending never transitions back to running`() = runTest {
-        val backend = StartControlledBackend(identity = TerminalIdentity.USER)
+        val backend = StartControlledBackend(identity = TerminalIdentity.User)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -315,7 +315,7 @@ class TerminalSessionTest {
 
     @Test
     fun `close maps await exit exception to runtime terminated failure`() = runTest {
-        val backend = ThrowingExitBackend(identity = TerminalIdentity.ROOT)
+        val backend = ThrowingExitBackend(identity = TerminalIdentity.Su)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -326,14 +326,14 @@ class TerminalSessionTest {
 
         val failed = assertIs<SessionState.Failed>(session.close())
         val failure = assertIs<TerminalFailure.RuntimeTerminated>(failed.failure)
-        assertEquals(TerminalIdentity.ROOT, failure.identity)
+        assertEquals(TerminalIdentity.Su, failure.identity)
         assertEquals("await exit failed", failure.message)
         assertEquals(SessionState.Failed(failure), session.currentState)
     }
 
     @Test
     fun `output flow exception moves session to failed`() = runTest {
-        val backend = ThrowingOutputBackend(identity = TerminalIdentity.USER)
+        val backend = ThrowingOutputBackend(identity = TerminalIdentity.User)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),
@@ -347,14 +347,14 @@ class TerminalSessionTest {
 
         val failed = assertIs<SessionState.Failed>(session.currentState)
         val failure = assertIs<TerminalFailure.RuntimeTerminated>(failed.failure)
-        assertEquals(TerminalIdentity.USER, failure.identity)
+        assertEquals(TerminalIdentity.User, failure.identity)
         assertEquals("output failed", failure.message)
     }
 
 
     @Test
     fun `concurrent output keeps deterministic buffer invariants`() = runTest {
-        val backend = FakeBackend(identity = TerminalIdentity.USER)
+        val backend = FakeBackend(identity = TerminalIdentity.User)
         val session = createSession(
             backend = backend,
             clock = FakeClock(),

@@ -15,27 +15,27 @@ class RuntimeBackendFactoryTest {
     fun `user create returns user backend without starting it`() {
         val factory = createFactory()
 
-        val backend = factory.create(TerminalIdentity.USER)
+        val backend = factory.create(TerminalIdentity.User)
 
-        assertEquals(TerminalIdentity.USER, backend.identity)
+        assertEquals(TerminalIdentity.User, backend.identity)
     }
 
     @Test
     fun `root create returns root backend without starting it`() {
         val factory = createFactory()
 
-        val backend = factory.create(TerminalIdentity.ROOT)
+        val backend = factory.create(TerminalIdentity.Su)
 
-        assertEquals(TerminalIdentity.ROOT, backend.identity)
+        assertEquals(TerminalIdentity.Su, backend.identity)
     }
 
     @Test
     fun `shizuku create returns shizuku backend without starting it`() {
         val factory = createFactory()
 
-        val backend = factory.create(TerminalIdentity.SHIZUKU)
+        val backend = factory.create(TerminalIdentity.Shizuku)
 
-        assertEquals(TerminalIdentity.SHIZUKU, backend.identity)
+        assertEquals(TerminalIdentity.Shizuku, backend.identity)
     }
 
     private fun createFactory(): RuntimeBackendFactory {

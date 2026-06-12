@@ -33,7 +33,7 @@ class DefaultTermTest {
 
     @Test
     fun `exec returns exit code and strips internal marker`() = runTest {
-        val backend = RecordingBackend(TerminalIdentity.USER)
+        val backend = RecordingBackend(TerminalIdentity.User)
         val lastWrite = AtomicReference<String>("")
         backend.onSend = { input ->
             val payload = input.toByteArray().decodeToString()
@@ -62,7 +62,7 @@ class DefaultTermTest {
 
     @Test
     fun `exec timeout returns partial streamed output`() = runTest {
-        val backend = RecordingBackend(TerminalIdentity.USER)
+        val backend = RecordingBackend(TerminalIdentity.User)
         backend.onSend = {
             backend.emitStdout("partial-output")
         }

@@ -189,7 +189,7 @@ internal class ShizukuUserServiceClient(
             currentService to currentSessionId
         } ?: return SendResult.Failed(
             TerminalFailure.AlreadyClosed(
-                identity = TerminalIdentity.SHIZUKU,
+                identity = TerminalIdentity.Shizuku,
                 message = "Shizuku backend has not been started",
             ),
         )
@@ -279,7 +279,7 @@ internal class ShizukuUserServiceClient(
 
     private fun startupFailed(message: String, cause: Throwable): TerminalFailure.StartupFailed {
         return TerminalFailure.StartupFailed(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             message = message,
             cause = cause,
         )
@@ -290,7 +290,7 @@ internal class ShizukuUserServiceClient(
         cause: Throwable? = null,
     ): TerminalFailure.RuntimeTerminated {
         return TerminalFailure.RuntimeTerminated(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             message = message,
             cause = cause,
         )

@@ -65,7 +65,7 @@ object LibTerm {
                 scope = termScope,
                 bufferConfig = bufferConfig,
             ),
-            identity = TerminalIdentity.USER,
+            identity = TerminalIdentity.User,
             scope = termScope,
             ownsScope = scope == null,
         )
@@ -83,7 +83,7 @@ object LibTerm {
                 scope = termScope,
                 bufferConfig = bufferConfig,
             ),
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             scope = termScope,
             ownsScope = scope == null,
         )
@@ -103,7 +103,7 @@ object LibTerm {
                 scope = termScope,
                 bufferConfig = bufferConfig,
             ),
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             scope = termScope,
             ownsScope = scope == null,
         )
@@ -121,7 +121,7 @@ object LibTerm {
             scope = scope,
             backendFactory = {
                 LibsuTerminalBackend(
-                    identity = TerminalIdentity.USER,
+                    identity = TerminalIdentity.User,
                     clock = clock,
                     scope = scope,
                 )
@@ -146,7 +146,7 @@ object LibTerm {
             scope = scope,
             backendFactory = {
                 LibsuTerminalBackend(
-                    identity = TerminalIdentity.ROOT,
+                    identity = TerminalIdentity.Su,
                     clock = clock,
                     scope = scope,
                 )

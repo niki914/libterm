@@ -29,14 +29,14 @@ internal class RealLibsuShellAdapterFactory(
         val shell = withContext(ioDispatcher) {
             val builder = Shell.Builder.create()
             when (identity) {
-                TerminalIdentity.USER -> builder.setFlags(Shell.FLAG_NON_ROOT_SHELL)
-                TerminalIdentity.ROOT -> Unit
-                TerminalIdentity.SHIZUKU -> throw IllegalArgumentException(
+                TerminalIdentity.User -> builder.setFlags(Shell.FLAG_NON_ROOT_SHELL)
+                TerminalIdentity.Su -> Unit
+                TerminalIdentity.Shizuku -> throw IllegalArgumentException(
                     "libsu backend does not support SHIZUKU",
                 )
             }
             builder.build().also { shell ->
-                if (identity == TerminalIdentity.ROOT && !shell.isRoot) {
+                if (identity == TerminalIdentity.Su && !shell.isRoot) {
                     runCatching { shell.close() }
                     throw IllegalStateException("libsu returned a non-root shell for ROOT identity")
                 }

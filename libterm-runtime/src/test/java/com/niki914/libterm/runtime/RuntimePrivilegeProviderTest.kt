@@ -21,10 +21,10 @@ class RuntimePrivilegeProviderTest {
             shizukuProvider = shizuku,
         )
 
-        val result = provider.getAvailability(TerminalIdentity.USER)
+        val result = provider.getAvailability(TerminalIdentity.User)
 
         assertSame(BackendAvailability.Available, result)
-        assertEquals(listOf(TerminalIdentity.USER), libsu.calls)
+        assertEquals(listOf(TerminalIdentity.User), libsu.calls)
         assertEquals(emptyList(), shizuku.calls)
     }
 
@@ -37,10 +37,10 @@ class RuntimePrivilegeProviderTest {
             shizukuProvider = shizuku,
         )
 
-        val result = provider.getAvailability(TerminalIdentity.ROOT)
+        val result = provider.getAvailability(TerminalIdentity.Su)
 
         assertSame(BackendAvailability.Available, result)
-        assertEquals(listOf(TerminalIdentity.ROOT), libsu.calls)
+        assertEquals(listOf(TerminalIdentity.Su), libsu.calls)
         assertEquals(emptyList(), shizuku.calls)
     }
 
@@ -48,7 +48,7 @@ class RuntimePrivilegeProviderTest {
     fun `shizuku delegates to shizuku provider only`() = runTest {
         val libsu = RecordingPrivilegeProvider(shizukuUnavailable())
         val shizukuFailure = TerminalFailure.AuthorizationDenied(
-            identity = TerminalIdentity.SHIZUKU,
+            identity = TerminalIdentity.Shizuku,
             message = "permission denied",
         )
         val shizukuResult = BackendAvailability.Unauthorized(shizukuFailure)
@@ -58,17 +58,17 @@ class RuntimePrivilegeProviderTest {
             shizukuProvider = shizuku,
         )
 
-        val result = provider.getAvailability(TerminalIdentity.SHIZUKU)
+        val result = provider.getAvailability(TerminalIdentity.Shizuku)
 
         assertSame(shizukuResult, result)
         assertEquals(emptyList(), libsu.calls)
-        assertEquals(listOf(TerminalIdentity.SHIZUKU), shizuku.calls)
+        assertEquals(listOf(TerminalIdentity.Shizuku), shizuku.calls)
     }
 
     @Test
     fun `delegated failure object is returned unchanged`() = runTest {
         val failure = TerminalFailure.BackendUnavailable(
-            identity = TerminalIdentity.ROOT,
+            identity = TerminalIdentity.Su,
             message = "root unavailable",
         )
         val unavailable = BackendAvailability.Unavailable(failure)
@@ -77,7 +77,7 @@ class RuntimePrivilegeProviderTest {
             shizukuProvider = RecordingPrivilegeProvider(shizukuUnavailable()),
         )
 
-        val result = provider.getAvailability(TerminalIdentity.ROOT)
+        val result = provider.getAvailability(TerminalIdentity.Su)
 
         assertSame(unavailable, result)
     }
@@ -96,7 +96,7 @@ class RuntimePrivilegeProviderTest {
     private fun shizukuUnavailable(): BackendAvailability {
         return BackendAvailability.Unavailable(
             TerminalFailure.BackendUnavailable(
-                identity = TerminalIdentity.SHIZUKU,
+                identity = TerminalIdentity.Shizuku,
                 message = "not used",
             ),
         )
