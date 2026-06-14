@@ -7,7 +7,7 @@
 # libterm
 
 一个面向 Android 的终端会话库，基于 libsu 与 Shizuku 提供 `USER`、`ROOT`、`SHIZUKU` 三类 shell 会话。
-当前推荐以 Kotlin-first 的 `LibTerm.runtime()` / `LibTerm.term()` 为主入口；旧的 `newUserTerm()`、`newSuTerm()`、`newShizukuTerm()`、`createDefaultManager()` 仍保留，但已进入废弃迁移路径。
+当前推荐以 `LibTerm.runtime()` 管理多会话，以 `LibTerm.openUserTerm()` / `LibTerm.openSuTerm()` / `LibTerm.openShizukuTerm(context)` 创建单会话包装。
 
 ## Demo
 
@@ -18,7 +18,7 @@
 ## Features
 
 - 多身份支持：`USER`、`ROOT`、`SHIZUKU`
-- Kotlin-first 入口：`runtime.open { ... }` 与 `term { ... }`
+- Kotlin-first 入口：`runtime.open { ... }` 与 `open*Term(cwd = ...)`
 - 多会话能力：`LibTermRuntime` 支持同时打开、列举、关闭多个 session
 - 初始目录语义：`cwd` 只作用于打开时的初始工作目录
 - 双模式交互：阻塞式 `exec` 与流式 `open + write + stream`
@@ -82,20 +82,16 @@ launch {
 }
 ```
 
-### 单会话：`LibTerm.term()`
+### 单会话：`LibTerm.open*Term()`
 
-`term { ... }` 适合“拿一个交互式会话就用”的场景。
+`openUserTerm`、`openSuTerm`、`openShizukuTerm` 适合“拿一个交互式会话就用”的场景。
 
 ```kotlin
-import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.runtime.LibTerm
 import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.launch
 
-val term = LibTerm.term {
-    identity = TerminalIdentity.User
-    cwd = "/sdcard"
-}
+val term = LibTerm.openUserTerm(cwd = "/sdcard")
 
 launch {
     when (val result = term.exec("pwd")) {
@@ -175,18 +171,20 @@ val result = runtime.open {
 }
 ```
 
-## 迁移说明
+## 单会话辅助入口
 
-推荐迁移关系：
+每个辅助入口都接受可选 `cwd`，并返回懒打开的 `Term`；首次调用 `open()`、`exec()` 或 `write()` 时才会真正打开 shell。
 
-| 旧入口 | 新入口 |
-|---|---|
-| `LibTerm.newUserTerm()` | `LibTerm.term { identity = TerminalIdentity.User }` |
-| `LibTerm.newSuTerm()` | `LibTerm.term { identity = TerminalIdentity.Su }` |
-| `LibTerm.newShizukuTerm(context)` | `LibTerm.term(context) { identity = TerminalIdentity.Shizuku }` |
-| `LibTerm.createDefaultManager(...)` | `LibTerm.runtime(...)` |
+```kotlin
+val user = LibTerm.openUserTerm(cwd = "/sdcard")
+val root = LibTerm.openSuTerm(cwd = "/data/local/tmp")
+val shizuku = LibTerm.openShizukuTerm(
+    context = applicationContext,
+    cwd = "/sdcard/Download",
+)
+```
 
-旧入口仍可用，但都已标记为 `@Deprecated`。新的 README 示例默认不再围绕 `TerminalManager` 组织。
+需要显式管理多个 session 时，使用 `LibTerm.runtime()`。
 
 ## 低层 Core API
 
@@ -233,5 +231,4 @@ class TerminalManager {
 - `LibTermRuntime.close(sessionId)`：按 ID 关闭
 - `LibTermRuntime.closeAll()`：关闭当前 runtime 下所有活动会话
 
-如果你把 `scope` 传给了 `LibTerm.runtime()` 或 `LibTerm.term()`，仍然应该按宿主生命周期自行取消它。
-EOF; __tr_native_ec=$?; pwd -P >| '/var/folders/_c/6lxjwz7n11b_n2934w__bt0c0000gn/T/agent-toolhost/jobs/job-7bdd573ec98346a192ab3dc42735dd08/cwd.txt'; exit "$__tr_native_ec"
+如果你把 `scope` 传给了 `LibTerm.runtime()`，仍然应该按宿主生命周期自行取消它。`open*Term()` 辅助入口持有内部 scope，关闭返回的 `Term` 时会释放。

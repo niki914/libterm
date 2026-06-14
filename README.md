@@ -7,7 +7,7 @@ English | **[中文](README_zh_CN.md)**
 # libterm
 
 An Android terminal session library built on top of libsu and Shizuku.
-The recommended public entry points are now Kotlin-first `LibTerm.runtime()` and `LibTerm.term()`. Legacy helpers such as `newUserTerm()`, `newSuTerm()`, `newShizukuTerm()`, and `createDefaultManager()` still exist, but they are now deprecated migration shims.
+The recommended public entry points are `LibTerm.runtime()` for multi-session hosts and `LibTerm.openUserTerm()` / `LibTerm.openSuTerm()` / `LibTerm.openShizukuTerm(context)` for single-session wrappers.
 
 ## Demo
 
@@ -18,7 +18,7 @@ This repository contains a runnable smoke demo app:
 ## Features
 
 - Multi-identity shells: `USER`, `ROOT`, `SHIZUKU`
-- Kotlin-first runtime API: `runtime.open { ... }` and `term { ... }`
+- Kotlin-first runtime API: `runtime.open { ... }` and `open*Term(cwd = ...)`
 - Multi-session host via `LibTermRuntime`
 - Initial working directory support via `cwd`
 - Dual interaction model: blocking `exec` and streaming `open + write + stream`
@@ -82,20 +82,16 @@ launch {
 }
 ```
 
-### Single session: `LibTerm.term()`
+### Single session: `LibTerm.open*Term()`
 
-Use `term { ... }` when you only need one interactive session wrapper.
+Use `openUserTerm`, `openSuTerm`, or `openShizukuTerm` when you only need one interactive session wrapper.
 
 ```kotlin
-import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.runtime.LibTerm
 import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.launch
 
-val term = LibTerm.term {
-    identity = TerminalIdentity.User
-    cwd = "/sdcard"
-}
+val term = LibTerm.openUserTerm(cwd = "/sdcard")
 
 launch {
     when (val result = term.exec("pwd")) {
@@ -175,18 +171,20 @@ val result = runtime.open {
 }
 ```
 
-## Migration
+## Single-session Helpers
 
-Recommended replacements:
+Each helper accepts an optional `cwd` and returns a lazy `Term`; the shell is opened by the first `open()`, `exec()`, or `write()` call.
 
-| Legacy entry | New entry |
-|---|---|
-| `LibTerm.newUserTerm()` | `LibTerm.term { identity = TerminalIdentity.User }` |
-| `LibTerm.newSuTerm()` | `LibTerm.term { identity = TerminalIdentity.Su }` |
-| `LibTerm.newShizukuTerm(context)` | `LibTerm.term(context) { identity = TerminalIdentity.Shizuku }` |
-| `LibTerm.createDefaultManager(...)` | `LibTerm.runtime(...)` |
+```kotlin
+val user = LibTerm.openUserTerm(cwd = "/sdcard")
+val root = LibTerm.openSuTerm(cwd = "/data/local/tmp")
+val shizuku = LibTerm.openShizukuTerm(
+    context = applicationContext,
+    cwd = "/sdcard/Download",
+)
+```
 
-The old APIs remain callable, but they are now marked `@Deprecated`, and the primary documentation no longer treats `TerminalManager` as the default application-level mental model.
+Use `LibTerm.runtime()` when you need to manage multiple sessions explicitly.
 
 ## Lower-level Core API
 
@@ -233,4 +231,4 @@ Common `TerminalFailure` types:
 - `LibTermRuntime.close(sessionId)` closes a specific session by ID
 - `LibTermRuntime.closeAll()` closes all active sessions owned by the runtime
 
-If you pass your own `scope` into `LibTerm.runtime()` or `LibTerm.term()`, you still own that scope and should cancel it with your host lifecycle.
+If you pass your own `scope` into `LibTerm.runtime()`, you still own that scope and should cancel it with your host lifecycle. `open*Term()` helpers own their internal scope and release it when the returned `Term` is closed.

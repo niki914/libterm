@@ -40,6 +40,59 @@ object LibTerm {
         )
     }
 
+    fun openUserTerm(
+        cwd: String? = null,
+    ): Term {
+        return createTerm(
+            context = null,
+            identity = TerminalIdentity.User,
+            cwd = cwd,
+        )
+    }
+
+    fun openSuTerm(
+        cwd: String? = null,
+    ): Term {
+        return createTerm(
+            context = null,
+            identity = TerminalIdentity.Su,
+            cwd = cwd,
+        )
+    }
+
+    fun openShizukuTerm(
+        context: Context,
+        cwd: String? = null,
+    ): Term {
+        return createTerm(
+            context = context,
+            identity = TerminalIdentity.Shizuku,
+            cwd = cwd,
+        )
+    }
+
+    private fun createTerm(
+        context: Context?,
+        identity: TerminalIdentity,
+        cwd: String?,
+    ): Term {
+        val termScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        return DefaultTerm(
+            runtime = LibTermRuntime(
+                manager = createRuntimeManager(
+                    context = context,
+                    scope = termScope,
+                    bufferConfig = TerminalBufferConfig(),
+                ),
+            ),
+            identity = identity,
+            authorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
+            openOptions = TerminalOpenOptions(cwd = cwd),
+            scope = termScope,
+            ownsScope = true,
+        )
+    }
+
     private fun createRuntimeManager(
         context: Context?,
         scope: CoroutineScope,
