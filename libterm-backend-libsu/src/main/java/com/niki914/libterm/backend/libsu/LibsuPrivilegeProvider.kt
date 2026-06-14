@@ -20,6 +20,13 @@ class LibsuPrivilegeProvider internal constructor(
                     message = "libsu backend does not support SHIZUKU",
                 ),
             )
+
+            TerminalIdentity.Ssh -> BackendAvailability.Unavailable(
+                TerminalFailure.BackendUnavailable(
+                    identity = TerminalIdentity.Ssh,
+                    message = "libsu backend does not support SSH",
+                ),
+            )
         }
     }
 

@@ -5,6 +5,7 @@ kotlinxCoroutines = "1.10.2"
 androidxAnnotation = "1.10.0"
 libsu = "6.0.0"
 shizuku = "13.1.5"
+jsch = "2.28.3"
 
 [libraries]
 androidx-annotation = { module = "androidx.annotation:annotation", version.ref = "androidxAnnotation" }
@@ -15,6 +16,7 @@ libsu-core = { module = "com.github.topjohnwu.libsu:core", version.ref = "libsu"
 libsu-service = { module = "com.github.topjohnwu.libsu:service", version.ref = "libsu" }
 shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
 shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku" }
+jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

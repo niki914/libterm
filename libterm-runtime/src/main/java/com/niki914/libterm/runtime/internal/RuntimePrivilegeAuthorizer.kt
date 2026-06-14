@@ -19,6 +19,8 @@ internal class RuntimePrivilegeAuthorizer(
             TerminalIdentity.Su -> requestLibsuAuthorization(identity)
 
             TerminalIdentity.Shizuku -> shizukuAuthorizer.requestAuthorization(identity)
+
+            TerminalIdentity.Ssh -> AuthorizationResult.Granted
         }
     }
 

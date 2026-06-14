@@ -38,6 +38,7 @@ dependencies {
     api(libs.kotlinx.coroutines.core)
     implementation(project(":libterm-backend-libsu"))
     implementation(project(":libterm-backend-shizuku"))
+    implementation(project(":libterm-backend-ssh"))
 
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)

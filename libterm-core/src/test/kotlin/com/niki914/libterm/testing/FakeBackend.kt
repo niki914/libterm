@@ -41,8 +41,12 @@ class FakeBackend(
     var startCallCount: Int = 0
         private set
 
+    var lastStartOptions: TerminalOpenOptions? = null
+        private set
+
     override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
         startCallCount += 1
+        lastStartOptions = openOptions
         val failure = startFailure
         return if (failure == null) {
             BackendStartResult.Started

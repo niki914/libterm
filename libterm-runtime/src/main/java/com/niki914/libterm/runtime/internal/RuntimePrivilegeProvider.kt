@@ -16,6 +16,8 @@ internal class RuntimePrivilegeProvider(
             TerminalIdentity.Su -> libsuProvider.getAvailability(identity)
 
             TerminalIdentity.Shizuku -> shizukuProvider.getAvailability(identity)
+
+            TerminalIdentity.Ssh -> BackendAvailability.Available
         }
     }
 }

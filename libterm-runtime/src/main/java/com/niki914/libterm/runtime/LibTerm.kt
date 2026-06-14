@@ -12,6 +12,7 @@ import com.niki914.libterm.backend.libsu.LibsuTerminalBackend
 import com.niki914.libterm.backend.shizuku.ShizukuPrivilegeAuthorizer
 import com.niki914.libterm.backend.shizuku.ShizukuPrivilegeProvider
 import com.niki914.libterm.backend.shizuku.ShizukuTerminalBackend
+import com.niki914.libterm.backend.ssh.SshTerminalBackend
 import com.niki914.libterm.runtime.internal.DefaultTerm
 import com.niki914.libterm.runtime.internal.RuntimeBackendFactory
 import com.niki914.libterm.runtime.internal.RuntimeClock
@@ -102,7 +103,7 @@ object LibTerm {
         val clock = RuntimeClock
         val libsuProvider = LibsuPrivilegeProvider()
         val shizukuProvider = ShizukuPrivilegeProvider()
-        val backendFactory: (TerminalIdentity) -> TerminalBackend =
+        val backendFactory: (TerminalIdentity, TerminalOpenOptions) -> TerminalBackend =
             if (appContext != null) {
                 RuntimeBackendFactory(
                     context = appContext,
@@ -110,7 +111,7 @@ object LibTerm {
                     scope = scope,
                 )::create
             } else {
-                { identity ->
+                { identity, openOptions ->
                     when (identity) {
                         TerminalIdentity.User -> LibsuTerminalBackend(
                             identity = TerminalIdentity.User,
@@ -126,6 +127,14 @@ object LibTerm {
 
                         TerminalIdentity.Shizuku -> throw IllegalStateException(
                             "Context is required for Shizuku sessions",
+                        )
+
+                        TerminalIdentity.Ssh -> SshTerminalBackend(
+                            options = requireNotNull(openOptions.ssh) {
+                                "SSH open options are required"
+                            },
+                            clock = clock,
+                            scope = scope,
                         )
                     }
                 }

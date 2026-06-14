@@ -4,4 +4,5 @@ enum class TerminalIdentity {
     User,
     Su,
     Shizuku,
+    Ssh,
 }

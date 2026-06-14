@@ -17,7 +17,8 @@ class ShizukuPrivilegeProvider internal constructor(
         return when (identity) {
             TerminalIdentity.Shizuku -> getShizukuAvailability()
             TerminalIdentity.User,
-            TerminalIdentity.Su -> BackendAvailability.Unavailable(
+            TerminalIdentity.Su,
+            TerminalIdentity.Ssh -> BackendAvailability.Unavailable(
                 TerminalFailure.BackendUnavailable(
                     identity = identity,
                     message = "Shizuku backend only supports SHIZUKU",

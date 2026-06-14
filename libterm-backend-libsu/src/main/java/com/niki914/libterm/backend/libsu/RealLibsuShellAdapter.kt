@@ -38,6 +38,10 @@ internal class RealLibsuShellAdapterFactory(
                 TerminalIdentity.Shizuku -> throw IllegalArgumentException(
                     "libsu backend does not support SHIZUKU",
                 )
+
+                TerminalIdentity.Ssh -> throw IllegalArgumentException(
+                    "libsu backend does not support SSH",
+                )
             }
             builder.build().also { shell ->
                 if (identity == TerminalIdentity.Su && !shell.isRoot) {

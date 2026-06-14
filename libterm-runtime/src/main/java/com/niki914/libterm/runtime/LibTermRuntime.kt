@@ -2,6 +2,7 @@ package com.niki914.libterm.runtime
 
 import com.niki914.libterm.OpenResult
 import com.niki914.libterm.TerminalFailure
+import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
 import com.niki914.libterm.TerminalOpenOptions
 import com.niki914.libterm.TerminalSession
@@ -14,7 +15,16 @@ class LibTermRuntime internal constructor(
     private val sessionsById = LinkedHashMap<String, LibTermSession>()
 
     suspend fun open(configure: TerminalOpenSpec.() -> Unit): OpenResult<LibTermSession> {
-        val spec = TerminalOpenSpec().apply(configure)
+        val spec = try {
+            TerminalOpenSpec().apply(configure)
+        } catch (error: SshOpenOptionsException) {
+            return OpenResult.Failure(
+                TerminalFailure.InvalidOpenOptions(
+                    identity = TerminalIdentity.Ssh,
+                    message = error.message,
+                ),
+            )
+        }
         if (!spec.hasIdentity()) {
             return OpenResult.Failure(
                 TerminalFailure.InvalidOpenOptions(
@@ -29,6 +39,7 @@ class LibTermRuntime internal constructor(
             authorizationMode = spec.authorizationMode ?: config.defaultAuthorizationMode,
             openOptions = TerminalOpenOptions(
                 cwd = spec.cwd ?: config.defaultCwd,
+                ssh = spec.sshOptions,
             ),
         )) {
             is OpenResult.Success -> OpenResult.Success(wrapSession(result.value))

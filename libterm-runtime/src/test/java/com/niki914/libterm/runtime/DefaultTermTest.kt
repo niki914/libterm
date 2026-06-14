@@ -128,7 +128,7 @@ class DefaultTermTest {
             idGenerator = CountingIdGenerator(),
             clock = FixedClock,
             scope = backgroundScope,
-            backendFactory = { backend },
+            backendFactory = { _, _ -> backend },
         )
         return DefaultTerm(
             manager = manager,

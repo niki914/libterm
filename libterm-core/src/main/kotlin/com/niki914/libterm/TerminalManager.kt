@@ -9,7 +9,7 @@ class TerminalManager(
     private val idGenerator: IdGenerator,
     private val clock: Clock,
     private val scope: CoroutineScope,
-    private val backendFactory: (TerminalIdentity) -> TerminalBackend,
+    private val backendFactory: (TerminalIdentity, TerminalOpenOptions) -> TerminalBackend,
     private val bufferConfig: TerminalBufferConfig = TerminalBufferConfig(),
 ) {
     private val registryLock = Any()
@@ -20,13 +20,17 @@ class TerminalManager(
         authorizationMode: AuthorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
         openOptions: TerminalOpenOptions = TerminalOpenOptions(),
     ): OpenResult<TerminalSession> {
-        val normalizedOpenOptions = normalizeOpenOptions(openOptions)
-            ?: return OpenResult.Failure(
-                TerminalFailure.InvalidOpenOptions(
-                    identity = identity,
-                    message = "cwd must be an absolute path",
-                ),
-            )
+        val normalizedOpenOptions = when (val result = normalizeOpenOptions(identity, openOptions)) {
+            is NormalizeOpenOptionsResult.Valid -> result.openOptions
+            is NormalizeOpenOptionsResult.Invalid -> {
+                return OpenResult.Failure(
+                    TerminalFailure.InvalidOpenOptions(
+                        identity = identity,
+                        message = result.message,
+                    ),
+                )
+            }
+        }
 
         return when (val availability = privilegeProvider.getAvailability(identity)) {
             is BackendAvailability.Unavailable -> OpenResult.Failure(availability.failure)
@@ -91,7 +95,7 @@ class TerminalManager(
     ): OpenResult<TerminalSession> {
         val sessionId = idGenerator.nextId()
         val backend = try {
-            backendFactory(identity)
+            backendFactory(identity, openOptions)
         } catch (error: Throwable) {
             if (error is CancellationException) {
                 throw error
@@ -132,14 +136,34 @@ class TerminalManager(
         }
     }
 
-    private fun normalizeOpenOptions(openOptions: TerminalOpenOptions): TerminalOpenOptions? {
+    private fun normalizeOpenOptions(
+        identity: TerminalIdentity,
+        openOptions: TerminalOpenOptions,
+    ): NormalizeOpenOptionsResult {
         val normalizedCwd = openOptions.cwd?.trim()
-        if (normalizedCwd.isNullOrEmpty()) {
-            return openOptions.copy(cwd = null)
+        val normalizedOpenOptions = if (normalizedCwd.isNullOrEmpty()) {
+            openOptions.copy(cwd = null)
+        } else {
+            if (!normalizedCwd.startsWith("/")) {
+                return NormalizeOpenOptionsResult.Invalid("cwd must be an absolute path")
+            }
+            openOptions.copy(cwd = normalizedCwd)
         }
-        if (!normalizedCwd.startsWith("/")) {
-            return null
+
+        if (identity == TerminalIdentity.Ssh && normalizedOpenOptions.ssh == null) {
+            return NormalizeOpenOptionsResult.Invalid("SSH open options are required")
         }
-        return openOptions.copy(cwd = normalizedCwd)
+
+        return NormalizeOpenOptionsResult.Valid(normalizedOpenOptions)
+    }
+
+    private sealed interface NormalizeOpenOptionsResult {
+        data class Valid(
+            val openOptions: TerminalOpenOptions,
+        ) : NormalizeOpenOptionsResult
+
+        data class Invalid(
+            val message: String,
+        ) : NormalizeOpenOptionsResult
     }
 }

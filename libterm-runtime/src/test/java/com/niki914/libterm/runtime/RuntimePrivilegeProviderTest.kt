@@ -66,6 +66,22 @@ class RuntimePrivilegeProviderTest {
     }
 
     @Test
+    fun `ssh is available without delegating to local providers`() = runTest {
+        val libsu = RecordingPrivilegeProvider(shizukuUnavailable())
+        val shizuku = RecordingPrivilegeProvider(shizukuUnavailable())
+        val provider = RuntimePrivilegeProvider(
+            libsuProvider = libsu,
+            shizukuProvider = shizuku,
+        )
+
+        val result = provider.getAvailability(TerminalIdentity.Ssh)
+
+        assertSame(BackendAvailability.Available, result)
+        assertEquals(emptyList(), libsu.calls)
+        assertEquals(emptyList(), shizuku.calls)
+    }
+
+    @Test
     fun `delegated failure object is returned unchanged`() = runTest {
         val failure = TerminalFailure.BackendUnavailable(
             identity = TerminalIdentity.Su,

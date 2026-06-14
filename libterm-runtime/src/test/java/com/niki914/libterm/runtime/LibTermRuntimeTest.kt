@@ -24,6 +24,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -81,13 +83,26 @@ class LibTermRuntimeTest {
         terminalSession.close()
     }
 
+    @Test
+    fun `open does not convert caller illegal argument to ssh open failure`() = runTest {
+        val runtime = LibTermRuntime(createManager(BlockingBackend(TerminalIdentity.User)))
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            runtime.open {
+                throw IllegalArgumentException("caller bug")
+            }
+        }
+
+        assertEquals("caller bug", error.message)
+    }
+
     private fun TestScope.createManager(backend: TerminalBackend): TerminalManager {
         return TerminalManager(
             privilegeProvider = AvailableProvider,
             idGenerator = SequentialIdGenerator(),
             clock = FixedClock,
             scope = backgroundScope,
-            backendFactory = { backend },
+            backendFactory = { _, _ -> backend },
         )
     }
 

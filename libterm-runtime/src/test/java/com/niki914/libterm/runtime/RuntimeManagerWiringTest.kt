@@ -116,7 +116,10 @@ class RuntimeManagerWiringTest {
             return startedOptions[identity].orEmpty()
         }
 
-        fun create(identity: TerminalIdentity): TerminalBackend {
+        fun create(
+            identity: TerminalIdentity,
+            openOptions: TerminalOpenOptions,
+        ): TerminalBackend {
             createCounts[identity] = createCount(identity) + 1
             return FailingBackend(
                 identity = identity,

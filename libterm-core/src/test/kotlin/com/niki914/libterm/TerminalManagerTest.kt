@@ -97,6 +97,53 @@ class TerminalManagerTest {
     }
 
     @Test
+    fun `open forwards normalized cwd and ssh options to factory and backend`() = runTest {
+        val fixture = createOpenOptionsFixture()
+        val sshOptions = sshOptions()
+        val expectedOptions = TerminalOpenOptions(
+            cwd = "/home/shell",
+            ssh = sshOptions,
+        )
+
+        val result = fixture.manager.open(
+            identity = TerminalIdentity.Ssh,
+            openOptions = TerminalOpenOptions(
+                cwd = "  /home/shell  ",
+                ssh = sshOptions,
+            ),
+        )
+
+        assertIs<OpenResult.Success<TerminalSession>>(result)
+        assertEquals(listOf(TerminalIdentity.Ssh), fixture.requestedIdentities)
+        assertEquals(listOf(expectedOptions), fixture.factoryOpenOptions)
+        assertEquals(listOf(expectedOptions), fixture.startedOpenOptions)
+    }
+
+    @Test
+    fun `open ssh without ssh options returns invalid open options without creating backend`() =
+        runTest {
+            val fixture = createOpenOptionsFixture()
+
+            val result = fixture.manager.open(
+                identity = TerminalIdentity.Ssh,
+                openOptions = TerminalOpenOptions(cwd = "/home/shell"),
+            )
+
+            val failure = assertIs<OpenResult.Failure>(result)
+            assertEquals(
+                TerminalFailure.InvalidOpenOptions(
+                    identity = TerminalIdentity.Ssh,
+                    message = "SSH open options are required",
+                ),
+                failure.failure,
+            )
+            assertTrue(fixture.requestedIdentities.isEmpty())
+            assertTrue(fixture.factoryOpenOptions.isEmpty())
+            assertTrue(fixture.startedOpenOptions.isEmpty())
+            assertTrue(fixture.manager.list().isEmpty())
+        }
+
+    @Test
     fun `open root unavailable returns backend unavailable failure`() = runTest {
         val fixture = createFixture()
         fixture.provider.setUnavailable(TerminalIdentity.Su, message = "root missing")
@@ -360,6 +407,14 @@ class TerminalManagerTest {
 
     private fun bytesOf(text: String): TerminalBytes = TerminalBytes.of(text.encodeToByteArray())
 
+    private fun sshOptions(): SshOpenOptions {
+        return SshOpenOptions(
+            host = "192.168.1.10",
+            username = "root",
+            auth = SshAuth.Password("password"),
+        )
+    }
+
     private fun TestScope.createFixture(
         bufferConfig: TerminalBufferConfig = TerminalBufferConfig(),
         backendFactory: ((TerminalIdentity, FakeClock) -> FakeBackend)? = null,
@@ -375,7 +430,7 @@ class TerminalManagerTest {
             idGenerator = SequentialIdGenerator(),
             clock = clock,
             scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
-            backendFactory = { identity ->
+            backendFactory = { identity, _ ->
                 requestedIdentities += identity
                 val backend = backendFactory?.invoke(identity, clock)
                     ?: FakeBackend(identity = identity, clock = clock)
@@ -397,6 +452,7 @@ class TerminalManagerTest {
         val provider = FakeProvider()
         val authorizer = FakeAuthorizer()
         val requestedIdentities = mutableListOf<TerminalIdentity>()
+        val factoryOpenOptions = mutableListOf<TerminalOpenOptions>()
         val startedOpenOptions = mutableListOf<TerminalOpenOptions>()
         val manager = TerminalManager(
             privilegeProvider = provider,
@@ -404,8 +460,9 @@ class TerminalManagerTest {
             idGenerator = SequentialIdGenerator(),
             clock = FakeClock(),
             scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
-            backendFactory = { identity ->
+            backendFactory = { identity, openOptions ->
                 requestedIdentities += identity
+                factoryOpenOptions += openOptions
                 RecordingOpenOptionsBackend(
                     identity = identity,
                     startedOpenOptions = startedOpenOptions,
@@ -415,6 +472,7 @@ class TerminalManagerTest {
         return OpenOptionsFixture(
             manager = manager,
             requestedIdentities = requestedIdentities,
+            factoryOpenOptions = factoryOpenOptions,
             startedOpenOptions = startedOpenOptions,
         )
     }
@@ -436,6 +494,7 @@ class TerminalManagerTest {
     private class OpenOptionsFixture(
         val manager: TerminalManager,
         val requestedIdentities: MutableList<TerminalIdentity>,
+        val factoryOpenOptions: MutableList<TerminalOpenOptions>,
         val startedOpenOptions: MutableList<TerminalOpenOptions>,
     )
 
