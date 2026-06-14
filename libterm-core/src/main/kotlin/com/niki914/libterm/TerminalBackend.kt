@@ -6,7 +6,9 @@ interface TerminalBackend {
     val identity: TerminalIdentity
     val output: Flow<OutputChunk>
 
-    suspend fun start(): BackendStartResult
+    suspend fun start(
+        openOptions: TerminalOpenOptions = TerminalOpenOptions(),
+    ): BackendStartResult
 
     suspend fun send(input: TerminalBytes): SendResult
 

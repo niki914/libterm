@@ -9,6 +9,7 @@ import com.niki914.libterm.TerminalBackend
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.TerminalOpenOptions
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -40,7 +41,7 @@ class FakeBackend(
     var startCallCount: Int = 0
         private set
 
-    override suspend fun start(): BackendStartResult {
+    override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
         startCallCount += 1
         val failure = startFailure
         return if (failure == null) {

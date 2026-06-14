@@ -5,7 +5,6 @@ import android.content.ContextWrapper
 import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.OutputStream
 import com.niki914.libterm.TerminalBytes
-import com.niki914.libterm.TerminalManager
 import kotlinx.coroutines.test.TestScope
 import java.io.File
 import kotlin.test.Test
@@ -17,36 +16,36 @@ import kotlin.test.assertIs
 class LibTermTest {
 
     @Test
-    fun `create default manager returns terminal manager`() {
-        val manager: Any = LibTerm.createDefaultManager(
-            context = RuntimeTestContext(),
-            scope = TestScope(),
-        )
+    fun `runtime returns runtime facade`() {
+        val runtime: Any = LibTerm.runtime(scope = TestScope())
 
-        assertIs<TerminalManager>(manager)
-    }
-
-    @Test
-    fun `new user term returns term facade`() {
-        val term: Any = LibTerm.newUserTerm(scope = TestScope())
-
-        assertIs<Term>(term)
-    }
-
-    @Test
-    fun `new shizuku term returns term facade`() {
-        val term: Any = LibTerm.newShizukuTerm(
-            context = RuntimeTestContext(),
-            scope = TestScope(),
-        )
-
-        assertIs<Term>(term)
+        assertIs<LibTermRuntime>(runtime)
     }
 
     @Test
     fun `runtime does not expose libterm facade production type`() {
         assertFailsWith<ClassNotFoundException> {
             Class.forName("com.niki914.libterm.runtime.LibTermFacade")
+        }
+    }
+
+    @Test
+    fun `legacy facade entries are removed from public api`() {
+        val declaredMethods = LibTerm::class.java.declaredMethods
+        val removedNames = listOf(
+            "createDefaultManager",
+            "newUserTerm",
+            "newSuTerm",
+            "newShizukuTerm",
+            "term",
+        )
+
+        removedNames.forEach { methodName ->
+            assertEquals(
+                expected = false,
+                actual = declaredMethods.any { method -> method.name == methodName },
+                message = "$methodName should not stay in public LibTerm API",
+            )
         }
     }
 

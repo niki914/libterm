@@ -15,7 +15,9 @@ import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
 import com.niki914.libterm.runtime.internal.DefaultTerm
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.advanceTimeBy
@@ -29,6 +31,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class DefaultTermTest {
 
     @Test
@@ -88,10 +91,41 @@ class DefaultTermTest {
         term.close()
     }
 
+    @Test
+    fun `concurrent first open write and exec share one session`() = runTest {
+        val startGate = CompletableDeferred<Unit>()
+        val backend = RecordingBackend(TerminalIdentity.User).also { recordingBackend ->
+            recordingBackend.startGate = startGate
+            recordingBackend.onSend = { input ->
+                val payload = input.toByteArray().decodeToString()
+                val execId = Regex("__LIBTERM_EXIT_([^:]+):%s__")
+                    .find(payload)
+                    ?.groupValues
+                    ?.get(1)
+                if (execId != null) {
+                    recordingBackend.emitStdout("\n__LIBTERM_EXIT_${execId}:0__\n")
+                }
+            }
+        }
+        val term = createTerm(backend)
+
+        val opening = async { term.open() }
+        val writing = async { term.write("input") }
+        val executing = async { term.exec("true") }
+        runCurrent()
+
+        assertEquals(1, backend.startCallCount)
+        startGate.complete(Unit)
+        awaitAll(opening, writing, executing)
+        term.close()
+
+        assertEquals(1, backend.startCallCount)
+    }
+
     private fun kotlinx.coroutines.test.TestScope.createTerm(backend: RecordingBackend): Term {
         val manager = TerminalManager(
             privilegeProvider = AvailableProvider,
-            idGenerator = FixedIdGenerator,
+            idGenerator = CountingIdGenerator(),
             clock = FixedClock,
             scope = backgroundScope,
             backendFactory = { backend },
@@ -110,7 +144,7 @@ class DefaultTermTest {
         }
     }
 
-    private object FixedIdGenerator : IdGenerator {
+    private class CountingIdGenerator : IdGenerator {
         private var next = 0
 
         override fun nextId(): String {
@@ -133,10 +167,17 @@ class DefaultTermTest {
         private val exitResult = CompletableDeferred<TerminalFailure?>()
 
         var onSend: (suspend (TerminalBytes) -> Unit)? = null
+        var startGate: CompletableDeferred<Unit>? = null
+        var startCallCount: Int = 0
+            private set
 
         override val output: Flow<OutputChunk> = outputEvents
 
-        override suspend fun start(): BackendStartResult = BackendStartResult.Started
+        override suspend fun start(openOptions: com.niki914.libterm.TerminalOpenOptions): BackendStartResult {
+            startCallCount += 1
+            startGate?.await()
+            return BackendStartResult.Started
+        }
 
         override suspend fun send(input: TerminalBytes): SendResult {
             onSend?.invoke(input)

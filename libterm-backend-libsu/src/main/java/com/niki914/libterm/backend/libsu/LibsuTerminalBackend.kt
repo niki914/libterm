@@ -9,6 +9,7 @@ import com.niki914.libterm.TerminalBackend
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.TerminalOpenOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -52,7 +53,7 @@ class LibsuTerminalBackend(
 
     override val output: Flow<OutputChunk> = outputChunks.asSharedFlow()
 
-    override suspend fun start(): BackendStartResult {
+    override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
         return lifecycleMutex.withLock {
             startResult?.let { return@withLock it }
             if (closed) {
@@ -67,7 +68,7 @@ class LibsuTerminalBackend(
             }
 
             try {
-                val openedSession = adapterFactory.open(identity)
+                val openedSession = adapterFactory.open(identity, openOptions)
                 session = openedSession
                 outputCollectionJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                     openedSession.output.collect { event ->
@@ -75,6 +76,10 @@ class LibsuTerminalBackend(
                     }
                 }
                 rememberStartResult(BackendStartResult.Started)
+            } catch (error: LibsuInvalidOpenOptionsException) {
+                rememberStartResult(
+                    BackendStartResult.Failed(error.failure),
+                )
             } catch (error: Throwable) {
                 if (error is CancellationException) {
                     throw error

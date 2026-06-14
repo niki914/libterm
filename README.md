@@ -7,7 +7,7 @@ English | **[中文](README_zh_CN.md)**
 # libterm
 
 An Android terminal session library built on top of libsu and Shizuku.
-It provides a unified `Term` facade for `USER`, `ROOT`, and `SHIZUKU` shells, supporting both blocking `exec` and streaming `write + stream` interaction.
+The recommended public entry points are now Kotlin-first `LibTerm.runtime()` and `LibTerm.term()`. Legacy helpers such as `newUserTerm()`, `newSuTerm()`, `newShizukuTerm()`, and `createDefaultManager()` still exist, but they are now deprecated migration shims.
 
 ## Demo
 
@@ -15,43 +15,14 @@ This repository contains a runnable smoke demo app:
 
 - [`shell-smoke-app`](./shell-smoke-app)
 
-The demo creates three terms for `USER`, `ROOT`, and `SHIZUKU`, then shows explicit `open()`, streaming output rendering, and interactive command input.
-
-## Facade API
-
-Start from `LibTerm` in `libterm-runtime`:
-
-```kotlin
-val user = LibTerm.newUserTerm()
-val root = LibTerm.newSuTerm()
-val shizuku = LibTerm.newShizukuTerm(applicationContext)
-```
-
-Facade entry points:
-
-- `LibTerm.newUserTerm()`: regular shell, no `Context` required
-- `LibTerm.newSuTerm()`: root shell, no `Context` required
-- `LibTerm.newShizukuTerm(context)`: Shizuku shell, requires `Context`
-- `LibTerm.createDefaultManager(...)`: lower-level entry when you need to manage sessions yourself
-
-`Term` is the main runtime facade:
-
-- `open()`: explicitly open a long-lived shell session
-- `exec(command, timeoutMillis)`: run one command on the current shell and wait for completion or timeout
-- `write(text)` / `write(bytes)`: write input into the current long-lived shell
-- `stream`: observe live output chunks
-- `state`: observe session lifecycle state
-- `close()`: close the current term and release owned resources
-
 ## Features
 
-- Multi-identity support: `USER`, `ROOT`, `SHIZUKU`
-- Android runtime facade: `LibTerm.newUserTerm`, `newSuTerm`, `newShizukuTerm`
-- Dual interaction model: blocking `exec` and streaming `write + stream`
-- Timeout-aware command execution with partial output preserved on timeout
-- Session lifecycle tracking via `Starting`, `Running`, `Closed`, and `Failed`
-- Structured error model via `TerminalFailure`
-- Testable core in `libterm-core` with backend/provider abstractions
+- Multi-identity shells: `USER`, `ROOT`, `SHIZUKU`
+- Kotlin-first runtime API: `runtime.open { ... }` and `term { ... }`
+- Multi-session host via `LibTermRuntime`
+- Initial working directory support via `cwd`
+- Dual interaction model: blocking `exec` and streaming `open + write + stream`
+- Structured failures through `TerminalFailure`
 
 ## Installation
 
@@ -73,18 +44,58 @@ dependencies {
 }
 ```
 
-`libterm-runtime` exposes the core API and wires libsu + Shizuku backends for Android callers.
+`libterm-runtime` exposes the main Android-facing API and wires libsu + Shizuku backends internally.
 
-## Quick Start
+## Runtime First API
 
-The main entry is `Term`. For simple callers, use `exec`. For terminal-style interaction, use `open + stream + write`.
+### Multi-session: `LibTerm.runtime()`
+
+`LibTermRuntime` is the recommended long-lived host for defaults, multi-open, session listing, and batch shutdown.
 
 ```kotlin
+import com.niki914.libterm.OpenResult
+import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.runtime.LibTerm
+import kotlinx.coroutines.launch
+
+val runtime = LibTerm.runtime(
+    context = applicationContext,
+) {
+    defaultCwd = "/sdcard"
+}
+
+launch {
+    val user = runtime.open {
+        identity = TerminalIdentity.User
+    }
+
+    val root = runtime.open {
+        identity = TerminalIdentity.Su
+        cwd = "/data/local/tmp"
+    }
+
+    if (user is OpenResult.Success && root is OpenResult.Success) {
+        val sessions = runtime.listSessions()
+        println("opened sessions = ${sessions.map { it.id }}")
+        runtime.closeAll()
+    }
+}
+```
+
+### Single session: `LibTerm.term()`
+
+Use `term { ... }` when you only need one interactive session wrapper.
+
+```kotlin
+import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.runtime.LibTerm
 import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.launch
 
-val term = LibTerm.newUserTerm()
+val term = LibTerm.term {
+    identity = TerminalIdentity.User
+    cwd = "/sdcard"
+}
 
 launch {
     when (val result = term.exec("pwd")) {
@@ -93,21 +104,15 @@ launch {
         }
 
         is TermResult.Failure -> {
-            println("Exec failed: ${result.failure.message}")
+            println("exec failed: ${result.failure.message}")
         }
     }
 }
 ```
 
-Interactive usage:
+For terminal-style interaction instead of one-shot commands:
 
 ```kotlin
-import com.niki914.libterm.runtime.LibTerm
-import com.niki914.libterm.runtime.TermResult
-import kotlinx.coroutines.launch
-
-val term = LibTerm.newShizukuTerm(applicationContext)
-
 launch {
     when (val result = term.open()) {
         is TermResult.Success -> {
@@ -122,161 +127,77 @@ launch {
         }
 
         is TermResult.Failure -> {
-            println("Open failed: ${result.failure.message}")
+            println("open failed: ${result.failure.message}")
         }
     }
 }
 ```
 
-Notes:
+## `cwd` Semantics
 
-- `exec` runs on the current shell session and does not reset working directory or environment
-- `exec` returns partial `stdout` / `stderr` when `timeoutMillis` is reached, with `timedOut = true`
-- `write` is intended for long-lived interactive workloads such as `sh`, `top`, REPLs, or terminal UIs
-- `stream` is the live output flow; prefer `exec` when you only need a command result
+- `cwd` is the initial working directory for opening a session, not a per-`exec()` override.
+- `exec()` still reuses the current shell session and does not reset working directory or environment.
+- `cwd == null` or blank keeps the backend default behavior.
+- A non-empty `cwd` must be an absolute path; relative paths fail fast in the library.
+- Actual directory accessibility is validated in the target privilege context, so root-only or Shizuku-only paths are not rejected prematurely in the app process.
 
-## Open Different Identities
+Example:
 
 ```kotlin
-val user = LibTerm.newUserTerm()
-val root = LibTerm.newSuTerm()
-val shizuku = LibTerm.newShizukuTerm(applicationContext)
+val result = runtime.open {
+    identity = TerminalIdentity.User
+    cwd = "/sdcard/Download"
+}
 ```
+
+At the core layer this maps to:
+
+```kotlin
+TerminalOpenOptions(cwd = "/sdcard/Download")
+```
+
+## Identities And Authorization
 
 Identity mapping:
 
 | Identity | Backend | Description |
 |---|---|---|
 | `USER` | libsu | Regular shell without root authorization |
-| `ROOT` | libsu | Root shell; requires root capability and authorization |
-| `SHIZUKU` | Shizuku | Shizuku shell; requires Shizuku to be installed, running, and authorized |
+| `ROOT` | libsu | Root shell, requires root capability and authorization |
+| `SHIZUKU` | Shizuku | Shizuku shell, requires `context`, a running Shizuku environment, and authorization |
 
-## Permission Modes
-
-`Term` uses request-if-needed authorization behavior by default:
-
-- `newUserTerm()`: no extra authorization
-- `newSuTerm()`: libsu checks and requests root authorization when needed
-- `newShizukuTerm(context)`: Shizuku checks and requests authorization when needed
-
-If you need finer control such as `CHECK_ONLY`, use the lower-level `TerminalManager` API:
+The default authorization mode is `AuthorizationMode.REQUEST_IF_NEEDED`. To check without prompting:
 
 ```kotlin
-val result = manager.open(
-    identity = TerminalIdentity.SHIZUKU,
-    authorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
-)
+val result = runtime.open {
+    identity = TerminalIdentity.Shizuku
+    authorizationMode = AuthorizationMode.CHECK_ONLY
+}
 ```
 
-Available modes:
+## Migration
 
-| Mode | Behavior |
+Recommended replacements:
+
+| Legacy entry | New entry |
 |---|---|
-| `REQUEST_IF_NEEDED` | Requests authorization if the backend is not yet authorized |
-| `CHECK_ONLY` | Checks availability only and never triggers an authorization request |
+| `LibTerm.newUserTerm()` | `LibTerm.term { identity = TerminalIdentity.User }` |
+| `LibTerm.newSuTerm()` | `LibTerm.term { identity = TerminalIdentity.Su }` |
+| `LibTerm.newShizukuTerm(context)` | `LibTerm.term(context) { identity = TerminalIdentity.Shizuku }` |
+| `LibTerm.createDefaultManager(...)` | `LibTerm.runtime(...)` |
 
-Example:
+The old APIs remain callable, but they are now marked `@Deprecated`, and the primary documentation no longer treats `TerminalManager` as the default application-level mental model.
 
-```kotlin
-val result = manager.open(
-    identity = TerminalIdentity.ROOT,
-    authorizationMode = AuthorizationMode.CHECK_ONLY,
-)
-```
+## Lower-level Core API
 
-## Output Stream
-
-`TerminalSession` buffers backend output as `OutputChunk`:
-
-```kotlin
-val chunks = session.latest(limit = 128)
-
-val text = chunks.joinToString(separator = "") { chunk ->
-    chunk.bytes.toByteArray().decodeToString()
-}
-```
-
-`OutputChunk`:
-
-```kotlin
-data class OutputChunk(
-    val stream: OutputStream,
-    val bytes: TerminalBytes,
-    val timestampMillis: Long,
-)
-```
-
-`stream` indicates the source:
-
-- `OutputStream.STDOUT`
-- `OutputStream.STDERR`
-
-To customize buffer limits, build a manager manually:
-
-```kotlin
-val manager = LibTerm.createDefaultManager(
-    context = applicationContext,
-    scope = managerScope,
-    bufferConfig = TerminalBufferConfig(
-        maxChunkCount = 512,
-        maxByteCount = 256 * 1024,
-    ),
-)
-```
-
-## Session State
-
-`Term.state` and `TerminalSession.state` expose `StateFlow<SessionState>`:
-
-```kotlin
-session.state.collect { state ->
-    when (state) {
-        SessionState.Starting -> showStatus("starting")
-        SessionState.Running -> showStatus("running")
-        SessionState.Closed -> showStatus("closed")
-        is SessionState.Failed -> showStatus("failed: ${state.failure.message}")
-    }
-}
-```
-
-State definition:
-
-```kotlin
-sealed interface SessionState {
-    data object Starting : SessionState
-    data object Running : SessionState
-    data object Closed : SessionState
-    data class Failed(val failure: TerminalFailure) : SessionState
-}
-```
-
-## Term API
-
-```kotlin
-interface Term {
-    val state: StateFlow<SessionState>
-    val stream: Flow<OutputChunk>
-
-    suspend fun open(): TermResult<Unit>
-
-    suspend fun exec(
-        command: String,
-        timeoutMillis: Long = DEFAULT_EXEC_TIMEOUT_MILLIS,
-    ): TermResult<CommandResult>
-
-    suspend fun write(text: String): TermResult<Unit>
-    suspend fun write(bytes: ByteArray): TermResult<Unit>
-    suspend fun close(): TermResult<Unit>
-}
-```
-
-## TerminalManager API
+If you need direct registry control or want to test the core layer explicitly, `TerminalManager` is still available:
 
 ```kotlin
 class TerminalManager {
     suspend fun open(
         identity: TerminalIdentity,
         authorizationMode: AuthorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
+        openOptions: TerminalOpenOptions = TerminalOpenOptions(),
     ): OpenResult<TerminalSession>
 
     suspend fun close(id: String): Boolean
@@ -285,131 +206,31 @@ class TerminalManager {
 }
 ```
 
-- `open`: checks backend availability and authorization, then starts and registers a session
-- `close`: closes a session by ID and removes it from the manager registry
-- `get`: returns the current session by ID
-- `list`: returns a snapshot of registered sessions
+Rules for `openOptions.cwd`:
 
-## TerminalSession API
-
-```kotlin
-class TerminalSession {
-    val id: String
-    val identity: TerminalIdentity
-    val state: StateFlow<SessionState>
-    val currentState: SessionState
-
-    fun latest(limit: Int): List<OutputChunk>
-    suspend fun send(input: TerminalBytes): SendResult
-    suspend fun send(bytes: ByteArray): SendResult
-    suspend fun close(): SessionState
-}
-```
-
-- `latest(limit)`: returns the latest buffered output chunks
-- `send(input)`: writes input into the shell; callers usually need to append `\n` themselves
-- `send(bytes)`: convenience overload for raw bytes
-- `close()`: closes the backend and waits for the terminal state to settle
+- blank input is normalized to default behavior
+- relative paths return `TerminalFailure.InvalidOpenOptions`
+- valid absolute paths continue down to the selected backend
 
 ## Error Model
 
-Opening failures return `OpenResult.Failure`:
-
-```kotlin
-when (val result = manager.open(TerminalIdentity.ROOT)) {
-    is OpenResult.Success -> use(result.value)
-    is OpenResult.Failure -> handle(result.failure)
-}
-```
-
-Send failures return `SendResult.Failed`:
-
-```kotlin
-when (val result = session.send("id\n".encodeToByteArray())) {
-    SendResult.Sent -> Unit
-    is SendResult.Failed -> handle(result.failure)
-}
-```
-
-`Term` methods wrap failures as `TermResult.Failure`:
-
-```kotlin
-when (val result = term.exec("id")) {
-    is TermResult.Success -> println(result.value.exitCode)
-    is TermResult.Failure -> println(result.failure.message)
-}
-```
-
-`TerminalFailure` types:
+Common `TerminalFailure` types:
 
 | Failure | Scenario |
 |---|---|
-| `BackendUnavailable` | Backend is unavailable, for example Shizuku is not installed or root is not available |
+| `BackendUnavailable` | Backend is unavailable, for example root or Shizuku is not available |
 | `AuthorizationDenied` | Authorization was explicitly denied |
-| `AuthorizationFailed` | Authorization flow failed unexpectedly |
+| `AuthorizationFailed` | The authorization flow failed unexpectedly |
+| `InvalidOpenOptions` | Caller input is invalid, such as missing `identity` or a relative `cwd` |
 | `StartupFailed` | Shell startup failed |
 | `RuntimeTerminated` | Shell terminated unexpectedly during runtime |
 | `AlreadyClosed` | Session or backend is already closed |
 
 ## Closing Resources
 
-Close sessions when your Activity or ViewModel is destroyed, then cancel the scope you passed to the manager:
+- `Term.close()` closes the single-session wrapper
+- `LibTermSession.close()` closes one opened session
+- `LibTermRuntime.close(sessionId)` closes a specific session by ID
+- `LibTermRuntime.closeAll()` closes all active sessions owned by the runtime
 
-```kotlin
-override fun onDestroy() {
-    val sessionIds = manager.list().map { it.id }
-
-    managerScope.launch {
-        sessionIds.forEach { id ->
-            manager.close(id)
-        }
-        managerScope.cancel()
-    }
-
-    super.onDestroy()
-}
-```
-
-If you hold a `TerminalSession` or `Term` directly, you can also close it explicitly:
-
-```kotlin
-session.close()
-term.close()
-```
-
-## FAQ
-
-### Why does `send` not immediately produce output?
-
-`send` only means the input has been written to the shell. Command execution and output delivery are asynchronous. Callers should read `latest(...)` later or keep rendering from the output flow.
-
-### Why do commands usually need `\n`?
-
-Shells typically execute only after receiving Enter, so text commands usually look like this:
-
-```kotlin
-session.send(TerminalBytes.of("ls -la\n".encodeToByteArray()))
-```
-
-### Why does `ROOT` fail to open?
-
-Typical causes are missing root capability, authorization denial from the root manager, or an environment where libsu cannot obtain a root shell. In those cases `open(TerminalIdentity.ROOT)` returns `OpenResult.Failure`.
-
-### Why does `SHIZUKU` fail to open?
-
-Typical causes are Shizuku not being installed, not running, or not authorized yet. The backend can request authorization, but the user still needs a valid Shizuku environment.
-
-### How do I check permission without prompting?
-
-Use `AuthorizationMode.CHECK_ONLY`:
-
-```kotlin
-val result = manager.open(
-    identity = TerminalIdentity.SHIZUKU,
-    authorizationMode = AuthorizationMode.CHECK_ONLY,
-)
-```
-
-### Does output grow forever?
-
-No. `TerminalSession` only keeps the latest output in a bounded buffer. You can adjust it with `TerminalBufferConfig`.
+If you pass your own `scope` into `LibTerm.runtime()` or `LibTerm.term()`, you still own that scope and should cancel it with your host lifecycle.

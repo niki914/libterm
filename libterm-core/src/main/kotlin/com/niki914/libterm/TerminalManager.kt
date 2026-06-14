@@ -18,16 +18,26 @@ class TerminalManager(
     suspend fun open(
         identity: TerminalIdentity,
         authorizationMode: AuthorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
+        openOptions: TerminalOpenOptions = TerminalOpenOptions(),
     ): OpenResult<TerminalSession> {
+        val normalizedOpenOptions = normalizeOpenOptions(openOptions)
+            ?: return OpenResult.Failure(
+                TerminalFailure.InvalidOpenOptions(
+                    identity = identity,
+                    message = "cwd must be an absolute path",
+                ),
+            )
+
         return when (val availability = privilegeProvider.getAvailability(identity)) {
             is BackendAvailability.Unavailable -> OpenResult.Failure(availability.failure)
             is BackendAvailability.Unauthorized -> handleUnauthorized(
                 identity = identity,
                 authorizationMode = authorizationMode,
                 failure = availability.failure,
+                openOptions = normalizedOpenOptions,
             )
 
-            BackendAvailability.Available -> openAvailableSession(identity)
+            BackendAvailability.Available -> openAvailableSession(identity, normalizedOpenOptions)
         }
     }
 
@@ -60,6 +70,7 @@ class TerminalManager(
         identity: TerminalIdentity,
         authorizationMode: AuthorizationMode,
         failure: TerminalFailure,
+        openOptions: TerminalOpenOptions,
     ): OpenResult<TerminalSession> {
         if (authorizationMode == AuthorizationMode.CHECK_ONLY) {
             return OpenResult.Failure(failure)
@@ -67,14 +78,17 @@ class TerminalManager(
         val authorizer = privilegeAuthorizer ?: return OpenResult.Failure(failure)
 
         return when (val result = authorizer.requestAuthorization(identity)) {
-            AuthorizationResult.Granted -> openAvailableSession(identity)
+            AuthorizationResult.Granted -> openAvailableSession(identity, openOptions)
             is AuthorizationResult.Denied -> OpenResult.Failure(result.failure)
             is AuthorizationResult.Unavailable -> OpenResult.Failure(result.failure)
             is AuthorizationResult.Failed -> OpenResult.Failure(result.failure)
         }
     }
 
-    private suspend fun openAvailableSession(identity: TerminalIdentity): OpenResult<TerminalSession> {
+    private suspend fun openAvailableSession(
+        identity: TerminalIdentity,
+        openOptions: TerminalOpenOptions,
+    ): OpenResult<TerminalSession> {
         val sessionId = idGenerator.nextId()
         val backend = try {
             backendFactory(identity)
@@ -98,7 +112,7 @@ class TerminalManager(
             scope = scope,
         )
 
-        return when (val state = session.start()) {
+        return when (val state = session.start(openOptions)) {
             SessionState.Running -> {
                 synchronized(registryLock) {
                     sessionsById[session.id] = session
@@ -116,5 +130,16 @@ class TerminalManager(
                 ),
             )
         }
+    }
+
+    private fun normalizeOpenOptions(openOptions: TerminalOpenOptions): TerminalOpenOptions? {
+        val normalizedCwd = openOptions.cwd?.trim()
+        if (normalizedCwd.isNullOrEmpty()) {
+            return openOptions.copy(cwd = null)
+        }
+        if (!normalizedCwd.startsWith("/")) {
+            return null
+        }
+        return openOptions.copy(cwd = normalizedCwd)
     }
 }

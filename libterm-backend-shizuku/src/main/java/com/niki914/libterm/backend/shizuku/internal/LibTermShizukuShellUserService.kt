@@ -2,6 +2,7 @@ package com.niki914.libterm.backend.shizuku.internal
 
 import com.niki914.libterm.backend.shizuku.ILibTermShizukuShellCallback
 import com.niki914.libterm.backend.shizuku.ILibTermShizukuShellService
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -12,12 +13,15 @@ internal class LibTermShizukuShellUserService : ILibTermShizukuShellService.Stub
     private val nextSessionId = AtomicLong(0L)
     private val sessions = ConcurrentHashMap<Long, ShellSession>()
 
-    override fun openSession(callback: ILibTermShizukuShellCallback): Long {
+    override fun openSession(cwd: String, callback: ILibTermShizukuShellCallback): Long {
         val sessionId = nextSessionId.incrementAndGet()
         val process = try {
-            ProcessBuilder("sh")
+            val processBuilder = ProcessBuilder("sh")
                 .redirectErrorStream(false)
-                .start()
+            if (cwd.isNotEmpty()) {
+                processBuilder.directory(File(cwd))
+            }
+            processBuilder.start()
         } catch (error: Throwable) {
             callback.safeOnError(sessionId, "Failed to start Shizuku shell: ${error.message}")
             throw IllegalStateException("Failed to start Shizuku shell", error)

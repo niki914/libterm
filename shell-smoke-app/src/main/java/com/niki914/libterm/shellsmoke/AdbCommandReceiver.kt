@@ -4,86 +4,101 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.niki914.libterm.TerminalFailure
-import com.niki914.libterm.runtime.LibTerm
+import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.runtime.Term
 import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 
 class AdbCommandReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val pendingResult = goAsync()
-        receiverScope.launch {
-            var term: Term? = null
-            try {
-                if (intent.action != ACTION_EXEC) {
-                    pendingResult.resultCode = RESULT_INVALID_ARGUMENT
-                    pendingResult.resultData = errorJson("Unsupported action: ${intent.action}")
-                    return@launch
+        var term: Term? = null
+        try {
+            if (intent.action != ACTION_EXEC) {
+                resultCode = RESULT_INVALID_ARGUMENT
+                resultData = errorJson("Unsupported action: ${intent.action}")
+                return
+            }
+
+            val command = intent.getStringExtra(EXTRA_COMMAND)?.takeIf { it.isNotBlank() }
+            if (command == null) {
+                resultCode = RESULT_INVALID_ARGUMENT
+                resultData = errorJson("Missing extra: $EXTRA_COMMAND")
+                return
+            }
+
+            val identityName =
+                intent.getStringExtra(EXTRA_IDENTITY)?.uppercase() ?: IDENTITY_USER
+            val timeoutMillis = intent.getIntExtra(EXTRA_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)
+                .toLong()
+                .coerceAtLeast(0L)
+
+            term = createTerm(context, identityName)
+            val execResult = runBlocking {
+                term.exec(command = command, timeoutMillis = timeoutMillis)
+            }
+            when (execResult) {
+                is TermResult.Success -> {
+                    val value = execResult.value
+                    resultCode = value.exitCode ?: RESULT_TIMED_OUT
+                    resultData = JSONObject()
+                        .put("ok", true)
+                        .put("identity", identityName)
+                        .put("command", command)
+                        .put("stdout", value.stdout.toByteArray().decodeToString())
+                        .put("stderr", value.stderr.toByteArray().decodeToString())
+                        .put("exitCode", value.exitCode)
+                        .put("timedOut", value.timedOut)
+                        .toString()
                 }
 
-                val command = intent.getStringExtra(EXTRA_COMMAND)?.takeIf { it.isNotBlank() }
-                if (command == null) {
-                    pendingResult.resultCode = RESULT_INVALID_ARGUMENT
-                    pendingResult.resultData = errorJson("Missing extra: $EXTRA_COMMAND")
-                    return@launch
+                is TermResult.Failure -> {
+                    resultCode = RESULT_EXEC_FAILURE
+                    resultData = errorJson(
+                        message = execResult.failure.message
+                            ?: execResult.failure.javaClass.simpleName,
+                        failure = execResult.failure,
+                        identity = identityName,
+                        command = command,
+                    )
                 }
-
-                val identityName =
-                    intent.getStringExtra(EXTRA_IDENTITY)?.uppercase() ?: IDENTITY_USER
-                val timeoutMillis = intent.getIntExtra(EXTRA_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)
-                    .toLong()
-                    .coerceAtLeast(0L)
-
-                term = createTerm(context, identityName)
-                val execResult = term.exec(command = command, timeoutMillis = timeoutMillis)
-                when (execResult) {
-                    is TermResult.Success -> {
-                        val value = execResult.value
-                        pendingResult.resultCode = value.exitCode ?: RESULT_TIMED_OUT
-                        pendingResult.resultData = JSONObject()
-                            .put("ok", true)
-                            .put("identity", identityName)
-                            .put("command", command)
-                            .put("stdout", value.stdout.toByteArray().decodeToString())
-                            .put("stderr", value.stderr.toByteArray().decodeToString())
-                            .put("exitCode", value.exitCode)
-                            .put("timedOut", value.timedOut)
-                            .toString()
-                    }
-
-                    is TermResult.Failure -> {
-                        pendingResult.resultCode = RESULT_EXEC_FAILURE
-                        pendingResult.resultData = errorJson(
-                            message = execResult.failure.message
-                                ?: execResult.failure.javaClass.simpleName,
-                            failure = execResult.failure,
-                            identity = identityName,
-                            command = command,
-                        )
-                    }
-                }
-            } catch (e: IllegalArgumentException) {
-                pendingResult.resultCode = RESULT_INVALID_ARGUMENT
-                pendingResult.resultData = errorJson(e.message ?: "Invalid argument")
-            } catch (t: Throwable) {
-                pendingResult.resultCode = RESULT_INTERNAL_ERROR
-                pendingResult.resultData = errorJson(t.message ?: t.javaClass.simpleName)
-            } finally {
+            }
+        } catch (e: IllegalArgumentException) {
+            resultCode = RESULT_INVALID_ARGUMENT
+            resultData = errorJson(e.message ?: "Invalid argument")
+        } catch (t: Throwable) {
+            resultCode = RESULT_INTERNAL_ERROR
+            resultData = errorJson(t.message ?: t.javaClass.simpleName)
+        } finally {
+            runBlocking {
                 term?.close()
-                pendingResult.finish()
             }
         }
     }
 
     private fun createTerm(context: Context, identityName: String): Term {
         return when (identityName) {
-            IDENTITY_USER -> LibTerm.newUserTerm()
-            IDENTITY_ROOT -> LibTerm.newSuTerm()
-            IDENTITY_SHIZUKU -> LibTerm.newShizukuTerm(context.applicationContext)
+            IDENTITY_USER -> RuntimeTermAdapter(
+                context = context.applicationContext,
+                scope = receiverScope,
+                identity = TerminalIdentity.User,
+            )
+
+            IDENTITY_ROOT -> RuntimeTermAdapter(
+                context = context.applicationContext,
+                scope = receiverScope,
+                identity = TerminalIdentity.Su,
+            )
+
+            IDENTITY_SHIZUKU -> RuntimeTermAdapter(
+                context = context.applicationContext,
+                scope = receiverScope,
+                identity = TerminalIdentity.Shizuku,
+            )
+
             else -> throw IllegalArgumentException("Unsupported identity: $identityName")
         }
     }

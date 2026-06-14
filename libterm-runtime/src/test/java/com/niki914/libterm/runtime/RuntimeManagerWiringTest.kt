@@ -13,6 +13,7 @@ import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
+import com.niki914.libterm.TerminalOpenOptions
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.TestScope
@@ -34,11 +35,18 @@ class RuntimeManagerWiringTest {
         val factory = RecordingBackendFactory(startupFailure)
         val manager = createManager(factory)
 
-        val result = manager.open(TerminalIdentity.Su)
+        val result = manager.open(
+            identity = TerminalIdentity.Su,
+            openOptions = TerminalOpenOptions(cwd = "/data/local/tmp"),
+        )
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertSame(startupFailure, failure.failure)
         assertEquals(mapOf(TerminalIdentity.Su to 1), factory.createCounts)
+        assertEquals(
+            listOf(TerminalOpenOptions(cwd = "/data/local/tmp")),
+            factory.startedOptions(TerminalIdentity.Su),
+        )
         assertTrue(manager.list().isEmpty())
     }
 
@@ -51,13 +59,17 @@ class RuntimeManagerWiringTest {
         val factory = RecordingBackendFactory(startupFailure)
         val manager = createManager(factory)
 
-        val result = manager.open(TerminalIdentity.Shizuku)
+        val result = manager.open(
+            identity = TerminalIdentity.Shizuku,
+            openOptions = TerminalOpenOptions(),
+        )
 
         val failure = assertIs<OpenResult.Failure>(result)
         assertSame(startupFailure, failure.failure)
         assertEquals(1, factory.createCount(TerminalIdentity.Shizuku))
         assertEquals(0, factory.createCount(TerminalIdentity.User))
         assertEquals(0, factory.createCount(TerminalIdentity.Su))
+        assertEquals(listOf(TerminalOpenOptions()), factory.startedOptions(TerminalIdentity.Shizuku))
         assertTrue(manager.list().isEmpty())
     }
 
@@ -94,9 +106,14 @@ class RuntimeManagerWiringTest {
         private val startupFailure: TerminalFailure,
     ) {
         val createCounts = mutableMapOf<TerminalIdentity, Int>()
+        private val startedOptions = mutableMapOf<TerminalIdentity, MutableList<TerminalOpenOptions>>()
 
         fun createCount(identity: TerminalIdentity): Int {
             return createCounts[identity] ?: 0
+        }
+
+        fun startedOptions(identity: TerminalIdentity): List<TerminalOpenOptions> {
+            return startedOptions[identity].orEmpty()
         }
 
         fun create(identity: TerminalIdentity): TerminalBackend {
@@ -104,6 +121,9 @@ class RuntimeManagerWiringTest {
             return FailingBackend(
                 identity = identity,
                 startupFailure = startupFailure,
+                recordOpenOptions = { openOptions ->
+                    startedOptions.getOrPut(identity) { mutableListOf() } += openOptions
+                },
             )
         }
     }
@@ -111,10 +131,12 @@ class RuntimeManagerWiringTest {
     private class FailingBackend(
         override val identity: TerminalIdentity,
         private val startupFailure: TerminalFailure,
+        private val recordOpenOptions: (TerminalOpenOptions) -> Unit,
     ) : TerminalBackend {
         override val output: Flow<OutputChunk> = emptyFlow()
 
-        override suspend fun start(): BackendStartResult {
+        override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
+            recordOpenOptions(openOptions)
             return BackendStartResult.Failed(startupFailure)
         }
 

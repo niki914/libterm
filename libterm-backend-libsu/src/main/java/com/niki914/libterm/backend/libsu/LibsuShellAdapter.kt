@@ -4,11 +4,19 @@ import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.TerminalOpenOptions
 import kotlinx.coroutines.flow.Flow
 
 internal interface LibsuShellAdapterFactory {
-    suspend fun open(identity: TerminalIdentity): LibsuShellSession
+    suspend fun open(
+        identity: TerminalIdentity,
+        openOptions: TerminalOpenOptions,
+    ): LibsuShellSession
 }
+
+internal class LibsuInvalidOpenOptionsException(
+    val failure: TerminalFailure.InvalidOpenOptions,
+) : IllegalStateException(failure.message)
 
 internal interface LibsuShellSession {
     val output: Flow<LibsuOutputEvent>

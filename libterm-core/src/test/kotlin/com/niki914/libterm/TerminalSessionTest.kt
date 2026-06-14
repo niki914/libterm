@@ -411,7 +411,7 @@ class TerminalSessionTest {
         var closeCallCount: Int = 0
             private set
 
-        override suspend fun start(): BackendStartResult = startResult.await()
+        override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult = startResult.await()
 
         override suspend fun send(input: TerminalBytes): SendResult = SendResult.Sent
 
@@ -439,7 +439,7 @@ class TerminalSessionTest {
     ) : TerminalBackend {
         override val output: Flow<OutputChunk> = emptyFlow()
 
-        override suspend fun start(): BackendStartResult = BackendStartResult.Started
+        override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult = BackendStartResult.Started
 
         override suspend fun send(input: TerminalBytes): SendResult = SendResult.Sent
 
@@ -457,7 +457,7 @@ class TerminalSessionTest {
 
         override val output: Flow<OutputChunk> = emptyFlow()
 
-        override suspend fun start(): BackendStartResult = BackendStartResult.Started
+        override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult = BackendStartResult.Started
 
         override suspend fun send(input: TerminalBytes): SendResult {
             throw IllegalStateException("send failed")
@@ -482,7 +482,7 @@ class TerminalSessionTest {
 
         override val output: Flow<OutputChunk> = emptyFlow()
 
-        override suspend fun start(): BackendStartResult = BackendStartResult.Started
+        override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult = BackendStartResult.Started
 
         override suspend fun send(input: TerminalBytes): SendResult = SendResult.Failed(failure)
 
@@ -508,7 +508,7 @@ class TerminalSessionTest {
             throw IllegalStateException("output failed")
         }
 
-        override suspend fun start(): BackendStartResult = BackendStartResult.Started
+        override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult = BackendStartResult.Started
 
         override suspend fun send(input: TerminalBytes): SendResult = SendResult.Sent
 

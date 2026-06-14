@@ -10,6 +10,8 @@ import com.niki914.libterm.TerminalBackend
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.TerminalOpenOptions
+import com.niki914.libterm.backend.shizuku.internal.InvalidShizukuCwdException
 import com.niki914.libterm.backend.shizuku.internal.RealShizukuShellClientFactory
 import com.niki914.libterm.backend.shizuku.internal.ShizukuShellClient
 import com.niki914.libterm.backend.shizuku.internal.ShizukuShellClientFactory
@@ -55,7 +57,7 @@ class ShizukuTerminalBackend internal constructor(
 
     override val output: Flow<OutputChunk> = outputChunks.asSharedFlow()
 
-    override suspend fun start(): BackendStartResult {
+    override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
         return lifecycleMutex.withLock {
             startResult?.let { return@withLock it }
             if (closed) {
@@ -70,7 +72,7 @@ class ShizukuTerminalBackend internal constructor(
             }
 
             try {
-                val openedClient = clientFactory.open()
+                val openedClient = clientFactory.open(openOptions.cwd.orEmpty())
                 client = openedClient
                 outputCollectionJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                     openedClient.output.collect { event ->
@@ -84,11 +86,18 @@ class ShizukuTerminalBackend internal constructor(
                 }
                 rememberStartResult(
                     BackendStartResult.Failed(
-                        TerminalFailure.StartupFailed(
-                            identity = identity,
-                            message = error.message,
-                            cause = error,
-                        ),
+                        when (error) {
+                            is InvalidShizukuCwdException -> TerminalFailure.InvalidOpenOptions(
+                                identity = identity,
+                                message = error.message,
+                            )
+
+                            else -> TerminalFailure.StartupFailed(
+                                identity = identity,
+                                message = error.message,
+                                cause = error,
+                            )
+                        },
                     ),
                 )
             }

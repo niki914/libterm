@@ -8,6 +8,7 @@ import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.TerminalOpenOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -276,7 +277,10 @@ class LibsuTerminalBackendTest {
     ) : LibsuShellAdapterFactory {
         val openedIdentities = mutableListOf<TerminalIdentity>()
 
-        override suspend fun open(identity: TerminalIdentity): LibsuShellSession {
+        override suspend fun open(
+            identity: TerminalIdentity,
+            openOptions: TerminalOpenOptions,
+        ): LibsuShellSession {
             openedIdentities += identity
             startupError?.let { throw it }
             return nextSession

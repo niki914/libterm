@@ -8,6 +8,8 @@ import com.niki914.libterm.testing.SequentialIdGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -42,6 +44,56 @@ class TerminalManagerTest {
 
         fixture.finishAllBackends()
         advanceUntilIdle()
+    }
+
+    @Test
+    fun `open blank cwd is normalized to default behavior`() = runTest {
+        val fixture = createOpenOptionsFixture()
+
+        val result = fixture.manager.open(
+            identity = TerminalIdentity.User,
+            openOptions = TerminalOpenOptions(cwd = "  \n\t  "),
+        )
+
+        assertIs<OpenResult.Success<TerminalSession>>(result)
+        assertEquals(listOf(TerminalIdentity.User), fixture.requestedIdentities)
+        assertEquals(listOf(TerminalOpenOptions(cwd = null)), fixture.startedOpenOptions)
+    }
+
+    @Test
+    fun `open relative cwd returns invalid open options without creating backend`() = runTest {
+        val fixture = createOpenOptionsFixture()
+
+        val result = fixture.manager.open(
+            identity = TerminalIdentity.User,
+            openOptions = TerminalOpenOptions(cwd = "relative/path"),
+        )
+
+        val failure = assertIs<OpenResult.Failure>(result)
+        assertEquals(
+            TerminalFailure.InvalidOpenOptions(
+                identity = TerminalIdentity.User,
+                message = "cwd must be an absolute path",
+            ),
+            failure.failure,
+        )
+        assertTrue(fixture.requestedIdentities.isEmpty())
+        assertTrue(fixture.startedOpenOptions.isEmpty())
+        assertTrue(fixture.manager.list().isEmpty())
+    }
+
+    @Test
+    fun `open without cwd forwards default open options to backend`() = runTest {
+        val fixture = createOpenOptionsFixture()
+
+        val result = fixture.manager.open(
+            identity = TerminalIdentity.Su,
+            openOptions = TerminalOpenOptions(),
+        )
+
+        assertIs<OpenResult.Success<TerminalSession>>(result)
+        assertEquals(listOf(TerminalIdentity.Su), fixture.requestedIdentities)
+        assertEquals(listOf(TerminalOpenOptions()), fixture.startedOpenOptions)
     }
 
     @Test
@@ -341,6 +393,32 @@ class TerminalManagerTest {
         )
     }
 
+    private fun TestScope.createOpenOptionsFixture(): OpenOptionsFixture {
+        val provider = FakeProvider()
+        val authorizer = FakeAuthorizer()
+        val requestedIdentities = mutableListOf<TerminalIdentity>()
+        val startedOpenOptions = mutableListOf<TerminalOpenOptions>()
+        val manager = TerminalManager(
+            privilegeProvider = provider,
+            privilegeAuthorizer = authorizer,
+            idGenerator = SequentialIdGenerator(),
+            clock = FakeClock(),
+            scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            backendFactory = { identity ->
+                requestedIdentities += identity
+                RecordingOpenOptionsBackend(
+                    identity = identity,
+                    startedOpenOptions = startedOpenOptions,
+                )
+            },
+        )
+        return OpenOptionsFixture(
+            manager = manager,
+            requestedIdentities = requestedIdentities,
+            startedOpenOptions = startedOpenOptions,
+        )
+    }
+
     private class ManagerFixture(
         val provider: FakeProvider,
         val authorizer: FakeAuthorizer,
@@ -353,5 +431,29 @@ class TerminalManagerTest {
         fun finishAllBackends() {
             createdBackends.forEach(FakeBackend::finishNormally)
         }
+    }
+
+    private class OpenOptionsFixture(
+        val manager: TerminalManager,
+        val requestedIdentities: MutableList<TerminalIdentity>,
+        val startedOpenOptions: MutableList<TerminalOpenOptions>,
+    )
+
+    private class RecordingOpenOptionsBackend(
+        override val identity: TerminalIdentity,
+        private val startedOpenOptions: MutableList<TerminalOpenOptions>,
+    ) : TerminalBackend {
+        override val output: Flow<OutputChunk> = emptyFlow()
+
+        override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
+            startedOpenOptions += openOptions
+            return BackendStartResult.Started
+        }
+
+        override suspend fun send(input: TerminalBytes): SendResult = SendResult.Sent
+
+        override suspend fun close() = Unit
+
+        override suspend fun awaitExit(): TerminalFailure? = null
     }
 }

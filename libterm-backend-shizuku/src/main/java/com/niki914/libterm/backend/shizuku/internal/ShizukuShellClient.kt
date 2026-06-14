@@ -6,7 +6,7 @@ import com.niki914.libterm.TerminalFailure
 import kotlinx.coroutines.flow.Flow
 
 internal interface ShizukuShellClientFactory {
-    suspend fun open(): ShizukuShellClient
+    suspend fun open(cwd: String): ShizukuShellClient
 }
 
 internal interface ShizukuShellClient {

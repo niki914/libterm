@@ -47,7 +47,9 @@ class TerminalSession(
     val currentState: SessionState
         get() = state.value
 
-    suspend fun start(): SessionState {
+    suspend fun start(
+        openOptions: TerminalOpenOptions = TerminalOpenOptions(),
+    ): SessionState {
         val pendingStart = synchronized(lifecycleLock) {
             startDeferred?.let { return@synchronized it }
 
@@ -65,7 +67,7 @@ class TerminalSession(
         }
 
         val startResult = try {
-            backend.start()
+            backend.start(openOptions)
         } catch (error: Throwable) {
             if (error is CancellationException) {
                 throw error

@@ -14,7 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.TerminalFailure
-import com.niki914.libterm.runtime.LibTerm
+import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.runtime.Term
 import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.CoroutineScope
@@ -38,11 +38,29 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sessions = listOf(
-            DemoSessionViewState(label = "USER", term = LibTerm.newUserTerm()),
-            DemoSessionViewState(label = "ROOT", term = LibTerm.newSuTerm()),
+            DemoSessionViewState(
+                label = "USER",
+                term = RuntimeTermAdapter(
+                    context = applicationContext,
+                    scope = uiScope,
+                    identity = TerminalIdentity.User,
+                ),
+            ),
+            DemoSessionViewState(
+                label = "ROOT",
+                term = RuntimeTermAdapter(
+                    context = applicationContext,
+                    scope = uiScope,
+                    identity = TerminalIdentity.Su,
+                ),
+            ),
             DemoSessionViewState(
                 label = "SHIZUKU",
-                term = LibTerm.newShizukuTerm(applicationContext)
+                term = RuntimeTermAdapter(
+                    context = applicationContext,
+                    scope = uiScope,
+                    identity = TerminalIdentity.Shizuku,
+                ),
             ),
         )
         setContentView(createContentView())

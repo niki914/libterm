@@ -4,6 +4,7 @@ import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.TerminalOpenOptions
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -25,7 +26,10 @@ import java.io.OutputStream as JavaOutputStream
 internal class RealLibsuShellAdapterFactory(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : LibsuShellAdapterFactory {
-    override suspend fun open(identity: TerminalIdentity): LibsuShellSession {
+    override suspend fun open(
+        identity: TerminalIdentity,
+        openOptions: TerminalOpenOptions,
+    ): LibsuShellSession {
         val shell = withContext(ioDispatcher) {
             val builder = Shell.Builder.create()
             when (identity) {
@@ -42,7 +46,45 @@ internal class RealLibsuShellAdapterFactory(
                 }
             }
         }
+        try {
+            validateCwd(shell = shell, identity = identity, cwd = openOptions.cwd)
+        } catch (error: Throwable) {
+            runCatching { shell.close() }
+            throw error
+        }
         return RealLibsuShellSession(identity, shell, ioDispatcher)
+    }
+
+    private suspend fun validateCwd(
+        shell: Shell,
+        identity: TerminalIdentity,
+        cwd: String?,
+    ) {
+        if (cwd == null) {
+            return
+        }
+
+        val stderr = mutableListOf<String>()
+        val result = withContext(ioDispatcher) {
+            shell.newJob()
+                .add("builtin cd -- ${cwd.toShellSingleQuoted()} && pwd -P")
+                .to(mutableListOf(), stderr)
+                .exec()
+        }
+        if (result.isSuccess) {
+            return
+        }
+
+        throw LibsuInvalidOpenOptionsException(
+            TerminalFailure.InvalidOpenOptions(
+                identity = identity,
+                message = stderr.joinToString("\n").ifBlank { "Invalid cwd: $cwd" },
+            ),
+        )
+    }
+
+    private fun String.toShellSingleQuoted(): String {
+        return "'${replace("'", "'\"'\"'")}'"
     }
 }
 

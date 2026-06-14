@@ -53,6 +53,8 @@ internal class ShizukuUserServiceClient(
     private var service: ILibTermShizukuShellService? = null
     private var sessionId: Long? = null
     private var bound: Boolean = false
+    @Volatile
+    private var pendingCwd: String = ""
     private val pendingOutputEvents = mutableListOf<PendingOutputEvent>()
 
     override val output: Flow<ShizukuShellOutputEvent> = outputEvents.asSharedFlow()
@@ -102,8 +104,9 @@ internal class ShizukuUserServiceClient(
                 return
             }
             val connectedService = ILibTermShizukuShellService.Stub.asInterface(binder)
+            val currentCwd = pendingCwd
             try {
-                val openedSessionId = connectedService.openSession(callback)
+                val openedSessionId = connectedService.openSession(currentCwd, callback)
                 val pendingEvents = mutableListOf<ShizukuShellOutputEvent>()
                 synchronized(stateLock) {
                     service = connectedService
@@ -123,11 +126,11 @@ internal class ShizukuUserServiceClient(
                 connectActive.set(false)
                 resumeConnectSuccess()
             } catch (error: Throwable) {
-                val failure = startupFailed("Failed to open Shizuku shell session", error)
+                val failure = openSessionFailed(currentCwd, error)
                 exitSignal.complete(failure)
                 connectActive.set(false)
                 unbindIfBound()
-                resumeConnectFailure(error)
+                resumeConnectFailure(failure.asConnectException())
             }
         }
 
@@ -148,7 +151,8 @@ internal class ShizukuUserServiceClient(
 
     private var connectResult: CancellableContinuation<Unit>? = null
 
-    suspend fun connect() {
+    suspend fun connect(cwd: String) {
+        pendingCwd = cwd
         try {
             withTimeout(CONNECT_TIMEOUT_MILLIS) {
                 bindUserService()
@@ -296,9 +300,31 @@ internal class ShizukuUserServiceClient(
         )
     }
 
+    private fun openSessionFailed(cwd: String, cause: Throwable): TerminalFailure {
+        if (cwd.isNotEmpty() && cause.isUserServiceStartFailure()) {
+            return TerminalFailure.InvalidOpenOptions(
+                identity = TerminalIdentity.Shizuku,
+                message = "Invalid cwd: $cwd",
+            )
+        }
+        return startupFailed("Failed to open Shizuku shell session", cause)
+    }
+
+    private fun Throwable.isUserServiceStartFailure(): Boolean {
+        return message == USER_SERVICE_START_FAILURE_MESSAGE
+    }
+
+    private fun TerminalFailure.asConnectException(): Throwable {
+        return when (this) {
+            is TerminalFailure.InvalidOpenOptions -> InvalidShizukuCwdException(message)
+            else -> IllegalStateException(message)
+        }
+    }
+
     private companion object {
         private const val OUTPUT_BUFFER_CAPACITY = 64
         private const val CONNECT_TIMEOUT_MILLIS = 15_000L
+        private const val USER_SERVICE_START_FAILURE_MESSAGE = "Failed to start Shizuku shell"
     }
 
     private data class PendingOutputEvent(
@@ -306,3 +332,7 @@ internal class ShizukuUserServiceClient(
         val event: ShizukuShellOutputEvent,
     )
 }
+
+internal class InvalidShizukuCwdException(
+    message: String?,
+) : IllegalStateException(message)

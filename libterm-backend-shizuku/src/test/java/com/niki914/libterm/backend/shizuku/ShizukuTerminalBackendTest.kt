@@ -8,6 +8,8 @@ import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.TerminalOpenOptions
+import com.niki914.libterm.backend.shizuku.internal.InvalidShizukuCwdException
 import com.niki914.libterm.backend.shizuku.internal.ShizukuShellClient
 import com.niki914.libterm.backend.shizuku.internal.ShizukuShellClientFactory
 import com.niki914.libterm.backend.shizuku.internal.ShizukuShellOutputEvent
@@ -163,6 +165,34 @@ class ShizukuTerminalBackendTest {
         assertEquals(1, client.closeCallCount)
     }
 
+    @Test
+    fun `non cwd open failure with cwd maps to startup failed`() = runTest {
+        val backend = createBackend(
+            clientFactory = ThrowingShizukuShellClientFactory(
+                failure = IllegalStateException("binder died"),
+            ),
+        )
+
+        val result = backend.start(TerminalOpenOptions(cwd = "/missing"))
+
+        val failed = assertIs<BackendStartResult.Failed>(result)
+        assertIs<TerminalFailure.StartupFailed>(failed.failure)
+    }
+
+    @Test
+    fun `explicit cwd open failure maps to invalid open options`() = runTest {
+        val backend = createBackend(
+            clientFactory = ThrowingShizukuShellClientFactory(
+                failure = InvalidShizukuCwdException("Invalid cwd: /missing"),
+            ),
+        )
+
+        val result = backend.start(TerminalOpenOptions(cwd = "/missing"))
+
+        val failed = assertIs<BackendStartResult.Failed>(result)
+        assertIs<TerminalFailure.InvalidOpenOptions>(failed.failure)
+    }
+
     private fun TestScope.createBackend(
         clock: Clock = FakeClock(),
         clientFactory: ShizukuShellClientFactory,
@@ -188,9 +218,17 @@ class ShizukuTerminalBackendTest {
         var openCallCount: Int = 0
             private set
 
-        override suspend fun open(): ShizukuShellClient {
+        override suspend fun open(cwd: String): ShizukuShellClient {
             openCallCount += 1
             return client
+        }
+    }
+
+    private class ThrowingShizukuShellClientFactory(
+        private val failure: Throwable,
+    ) : ShizukuShellClientFactory {
+        override suspend fun open(cwd: String): ShizukuShellClient {
+            throw failure
         }
     }
 
