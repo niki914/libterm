@@ -1,11 +1,11 @@
 package com.niki914.libterm.runtime
 
-import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.SendResult
 import com.niki914.libterm.SessionState
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalSession
+import com.niki914.libterm.runtime.internal.LibTermSessionOutputPipeline
 import com.niki914.libterm.runtime.internal.TerminalCommandExecutor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,15 +15,24 @@ import kotlinx.coroutines.sync.withLock
 class LibTermSession internal constructor(
     private val session: TerminalSession,
     private val closeSession: suspend (String) -> Boolean,
+    decoder: SessionTerminalOutputDecoder,
 ) {
     private val inputMutex = Mutex()
+    private val outputPipeline = LibTermSessionOutputPipeline(
+        session = session,
+        decoder = decoder,
+    )
 
     val id: String = session.id
     val identity: TerminalIdentity = session.identity
     val state: StateFlow<SessionState> = session.state
-    val stream: Flow<OutputChunk> = session.output
+    val stream: Flow<TerminalTextChunk> = outputPipeline.stream
 
-    fun latest(limit: Int): List<OutputChunk> = session.latest(limit)
+    fun latest(limit: Int): List<TerminalTextChunk> = outputPipeline.latest(limit)
+
+    internal fun dispose() {
+        outputPipeline.close()
+    }
 
     suspend fun exec(
         command: String,
@@ -53,6 +62,7 @@ class LibTermSession internal constructor(
 
     suspend fun close(): TermResult<Unit> {
         return if (closeSession(id)) {
+            dispose()
             TermResult.Success(Unit)
         } else {
             TermResult.Failure(

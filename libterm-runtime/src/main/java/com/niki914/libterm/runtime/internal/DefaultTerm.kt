@@ -2,7 +2,6 @@ package com.niki914.libterm.runtime.internal
 
 import com.niki914.libterm.AuthorizationMode
 import com.niki914.libterm.OpenResult
-import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.SessionState
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
@@ -12,8 +11,10 @@ import com.niki914.libterm.runtime.LibTermRuntime
 import com.niki914.libterm.runtime.LibTermSession
 import com.niki914.libterm.runtime.Term
 import com.niki914.libterm.runtime.TermResult
+import com.niki914.libterm.runtime.TerminalTextChunk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+@OptIn(ExperimentalCoroutinesApi::class)
 internal class DefaultTerm(
     private val runtime: LibTermRuntime,
     private val identity: TerminalIdentity,
@@ -50,8 +52,8 @@ internal class DefaultTerm(
 
     private val lifecycleMutex = Mutex()
     private val stateEvents = MutableStateFlow<SessionState>(SessionState.Closed)
-    private val outputEvents = MutableSharedFlow<OutputChunk>(
-        replay = 0,
+    private val outputEvents = MutableSharedFlow<TerminalTextChunk>(
+        replay = OUTPUT_REPLAY_CAPACITY,
         extraBufferCapacity = 64,
     )
 
@@ -60,7 +62,7 @@ internal class DefaultTerm(
     private var outputJob: Job? = null
 
     override val state: StateFlow<SessionState> = stateEvents.asStateFlow()
-    override val stream: Flow<OutputChunk> = outputEvents.asSharedFlow()
+    override val stream: Flow<TerminalTextChunk> = outputEvents.asSharedFlow()
 
     override suspend fun open(): TermResult<Unit> {
         return when (val ensured = ensureSession()) {
@@ -151,6 +153,8 @@ internal class DefaultTerm(
     private fun bindSessionLocked(newSession: LibTermSession) {
         session = newSession
         stateEvents.value = newSession.state.value
+        outputEvents.resetReplayCache()
+        newSession.latest(Int.MAX_VALUE).forEach(outputEvents::tryEmit)
         stateJob?.cancel()
         outputJob?.cancel()
         stateJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -169,9 +173,14 @@ internal class DefaultTerm(
         if (existing == null || session == existing) {
             session = null
         }
+        outputEvents.resetReplayCache()
         stateJob?.cancel()
         stateJob = null
         outputJob?.cancel()
         outputJob = null
+    }
+
+    private companion object {
+        const val OUTPUT_REPLAY_CAPACITY: Int = 64
     }
 }

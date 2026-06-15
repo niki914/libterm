@@ -23,6 +23,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -157,6 +158,98 @@ class DefaultTermTest {
         term.close()
     }
 
+    @Test
+    fun `stream emits decoded terminal text chunks`() = runTest {
+        val backend = RecordingBackend(TerminalIdentity.User)
+        val term = createTerm(backend)
+        val rendered = mutableListOf<TerminalTextChunk>()
+        val collectJob = backgroundScope.launch {
+            term.stream.collect { rendered += it }
+        }
+        runCurrent()
+
+        assertIs<TermResult.Success<Unit>>(term.open())
+        runCurrent()
+        backend.emitStdout("\u001B[31mhello\u001B[0m")
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                TerminalTextChunk(
+                    stream = OutputStream.STDOUT,
+                    text = "hello",
+                    timestampMillis = 100L,
+                ),
+            ),
+            rendered,
+        )
+        collectJob.cancel()
+        term.close()
+    }
+
+    @Test
+    fun `stream replays startup output buffered before runtime pipeline is attached`() = runTest {
+        val backend = RecordingBackend(TerminalIdentity.User).also { recordingBackend ->
+            recordingBackend.onStart = {
+                recordingBackend.emitStdout("prompt> ")
+            }
+        }
+        val term = createTerm(backend)
+        val rendered = mutableListOf<TerminalTextChunk>()
+        val collectJob = backgroundScope.launch {
+            term.stream.collect { rendered += it }
+        }
+        runCurrent()
+
+        assertIs<TermResult.Success<Unit>>(term.open())
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                TerminalTextChunk(
+                    stream = OutputStream.STDOUT,
+                    text = "prompt> ",
+                    timestampMillis = 100L,
+                ),
+            ),
+            rendered,
+        )
+        collectJob.cancel()
+        term.close()
+    }
+
+    @Test
+    fun `late term stream subscribers still receive startup replay`() = runTest {
+        val backend = RecordingBackend(TerminalIdentity.User).also { recordingBackend ->
+            recordingBackend.onStart = {
+                recordingBackend.emitStdout("prompt> ")
+            }
+        }
+        val term = createTerm(backend)
+
+        assertIs<TermResult.Success<Unit>>(term.open())
+        runCurrent()
+
+        val rendered = mutableListOf<TerminalTextChunk>()
+        val collectJob = backgroundScope.launch {
+            term.stream.collect { rendered += it }
+        }
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                TerminalTextChunk(
+                    stream = OutputStream.STDOUT,
+                    text = "prompt> ",
+                    timestampMillis = 100L,
+                ),
+            ),
+            rendered,
+        )
+        collectJob.cancel()
+        term.close()
+    }
+
     private fun kotlinx.coroutines.test.TestScope.createTerm(backend: RecordingBackend): Term {
         val manager = TerminalManager(
             privilegeProvider = AvailableProvider,
@@ -202,6 +295,7 @@ class DefaultTermTest {
         private val exitResult = CompletableDeferred<TerminalFailure?>()
 
         var onSend: (suspend (TerminalBytes) -> Unit)? = null
+        var onStart: (suspend () -> Unit)? = null
         var startGate: CompletableDeferred<Unit>? = null
         var lastStartOptions: TerminalOpenOptions? = null
             private set
@@ -213,6 +307,7 @@ class DefaultTermTest {
         override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
             startCallCount += 1
             lastStartOptions = openOptions
+            onStart?.invoke()
             startGate?.await()
             return BackendStartResult.Started
         }

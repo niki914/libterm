@@ -6,6 +6,7 @@ import com.niki914.libterm.Clock
 import com.niki914.libterm.IdGenerator
 import com.niki914.libterm.OpenResult
 import com.niki914.libterm.OutputChunk
+import com.niki914.libterm.OutputStream
 import com.niki914.libterm.PrivilegeProvider
 import com.niki914.libterm.SendResult
 import com.niki914.libterm.TerminalBackend
@@ -19,7 +20,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -35,7 +37,7 @@ class LibTermRuntimeTest {
 
     @Test
     fun `runtime reuses one wrapper for the same terminal session id`() = runTest {
-        val runtime = LibTermRuntime(createManager(BlockingBackend(TerminalIdentity.User)))
+        val runtime = LibTermRuntime(createManager(StreamingBackend(TerminalIdentity.User)))
 
         val opened = assertIs<OpenResult.Success<LibTermSession>>(
             runtime.open { identity = TerminalIdentity.User },
@@ -50,7 +52,7 @@ class LibTermRuntimeTest {
     fun `session close does not wait behind blocked input writes`() = runTest {
         val sendEntered = CompletableDeferred<Unit>()
         val releaseSend = CompletableDeferred<Unit>()
-        val backend = BlockingBackend(
+        val backend = StreamingBackend(
             identity = TerminalIdentity.User,
             onSend = {
                 sendEntered.complete(Unit)
@@ -67,6 +69,7 @@ class LibTermRuntimeTest {
         val wrapper = LibTermSession(
             session = terminalSession,
             closeSession = { true },
+            decoder = PassthroughSessionDecoder(),
         )
 
         val writing = async { wrapper.write("blocked") }
@@ -85,7 +88,7 @@ class LibTermRuntimeTest {
 
     @Test
     fun `open does not convert caller illegal argument to ssh open failure`() = runTest {
-        val runtime = LibTermRuntime(createManager(BlockingBackend(TerminalIdentity.User)))
+        val runtime = LibTermRuntime(createManager(StreamingBackend(TerminalIdentity.User)))
 
         val error = assertFailsWith<IllegalArgumentException> {
             runtime.open {
@@ -96,13 +99,199 @@ class LibTermRuntimeTest {
         assertEquals("caller bug", error.message)
     }
 
+    @Test
+    fun `outputDecode overrides outputDecoder`() = runTest {
+        val backend = StreamingBackend(TerminalIdentity.User)
+        var createSessionDecoderCallCount = 0
+        val runtime = LibTermRuntime(
+            manager = createManager(backend),
+            config = LibTermRuntimeConfig().apply {
+                outputDecoder = object : TerminalOutputDecoder {
+                    override fun createSessionDecoder(): SessionTerminalOutputDecoder {
+                        createSessionDecoderCallCount += 1
+                        return PassthroughSessionDecoder(prefix = "decoder:")
+                    }
+                }
+                outputDecode = { chunk ->
+                    "lambda:${chunk.bytes.toByteArray().decodeToString()}"
+                }
+            },
+        )
+
+        val opened = assertIs<OpenResult.Success<LibTermSession>>(
+            runtime.open { identity = TerminalIdentity.User },
+        )
+        val rendered = mutableListOf<TerminalTextChunk>()
+        val collectJob = backgroundScope.launch {
+            opened.value.stream.collect { rendered += it }
+        }
+        runCurrent()
+        backend.emitStdout("hello")
+        runCurrent()
+
+        assertEquals(0, createSessionDecoderCallCount)
+        assertEquals(
+            listOf(
+                TerminalTextChunk(
+                    stream = OutputStream.STDOUT,
+                    text = "lambda:hello",
+                    timestampMillis = 100L,
+                ),
+            ),
+            rendered,
+        )
+        collectJob.cancel()
+        runtime.closeAll()
+    }
+
+    @Test
+    fun `runtime uses configured outputDecoder when outputDecode is absent`() = runTest {
+        val backend = StreamingBackend(TerminalIdentity.User)
+        var createSessionDecoderCallCount = 0
+        val runtime = LibTermRuntime(
+            manager = createManager(backend),
+            config = LibTermRuntimeConfig().apply {
+                outputDecoder = object : TerminalOutputDecoder {
+                    override fun createSessionDecoder(): SessionTerminalOutputDecoder {
+                        createSessionDecoderCallCount += 1
+                        return PassthroughSessionDecoder(prefix = "custom:")
+                    }
+                }
+            },
+        )
+
+        val opened = assertIs<OpenResult.Success<LibTermSession>>(
+            runtime.open { identity = TerminalIdentity.User },
+        )
+        val rendered = mutableListOf<String>()
+        val collectJob = backgroundScope.launch {
+            opened.value.stream.collect { rendered += it.text }
+        }
+        runCurrent()
+        backend.emitStdout("hello")
+        runCurrent()
+
+        assertEquals(1, createSessionDecoderCallCount)
+        assertEquals(listOf("custom:hello"), rendered)
+        collectJob.cancel()
+        runtime.closeAll()
+    }
+
+    @Test
+    fun `runtime creates isolated session decoders per session`() = runTest {
+        val backends = mutableListOf<StreamingBackend>()
+        val runtime = LibTermRuntime(
+            manager = createManager { identity ->
+                StreamingBackend(identity).also(backends::add)
+            },
+            config = LibTermRuntimeConfig().apply {
+                outputDecoder = object : TerminalOutputDecoder {
+                    override fun createSessionDecoder(): SessionTerminalOutputDecoder {
+                        return object : SessionTerminalOutputDecoder {
+                            private var chunkCount = 0
+
+                            override fun decode(chunk: OutputChunk): List<TerminalTextChunk> {
+                                chunkCount += 1
+                                return listOf(
+                                    TerminalTextChunk(
+                                        stream = chunk.stream,
+                                        text = "#$chunkCount:${chunk.bytes.toByteArray().decodeToString()}",
+                                        timestampMillis = chunk.timestampMillis,
+                                    ),
+                                )
+                            }
+
+                            override fun reset() = Unit
+                        }
+                    }
+                }
+            },
+        )
+
+        val first = assertIs<OpenResult.Success<LibTermSession>>(
+            runtime.open { identity = TerminalIdentity.User },
+        )
+        val second = assertIs<OpenResult.Success<LibTermSession>>(
+            runtime.open { identity = TerminalIdentity.Su },
+        )
+        val firstRendered = mutableListOf<String>()
+        val secondRendered = mutableListOf<String>()
+        val firstCollectJob = backgroundScope.launch {
+            first.value.stream.collect { firstRendered += it.text }
+        }
+        val secondCollectJob = backgroundScope.launch {
+            second.value.stream.collect { secondRendered += it.text }
+        }
+        runCurrent()
+        backends[0].emitStdout("one")
+        backends[1].emitStdout("two")
+        runCurrent()
+
+        assertEquals(listOf("#1:one"), firstRendered)
+        assertEquals(listOf("#1:two"), secondRendered)
+        firstCollectJob.cancel()
+        secondCollectJob.cancel()
+        runtime.closeAll()
+    }
+
+    @Test
+    fun `session latest includes startup output emitted before wrapper pipeline attachment`() = runTest {
+        val backend = StreamingBackend(TerminalIdentity.User).also { streamingBackend ->
+            streamingBackend.onStart = {
+                streamingBackend.emitStdout("banner")
+            }
+        }
+        val runtime = LibTermRuntime(createManager(backend))
+
+        val opened = assertIs<OpenResult.Success<LibTermSession>>(
+            runtime.open { identity = TerminalIdentity.User },
+        )
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                TerminalTextChunk(
+                    stream = OutputStream.STDOUT,
+                    text = "banner",
+                    timestampMillis = 100L,
+                ),
+            ),
+            opened.value.latest(10),
+        )
+        runtime.closeAll()
+    }
+
+    @Test
+    fun `session latest trims decoded buffer to bounded window`() = runTest {
+        val backend = StreamingBackend(TerminalIdentity.User)
+        val runtime = LibTermRuntime(createManager(backend))
+        val opened = assertIs<OpenResult.Success<LibTermSession>>(
+            runtime.open { identity = TerminalIdentity.User },
+        )
+        repeat(300) { index ->
+            backend.emitStdout("line-$index")
+            runCurrent()
+        }
+
+        val latest = opened.value.latest(300)
+
+        assertEquals(256, latest.size)
+        assertEquals("line-44", latest.first().text)
+        assertEquals("line-299", latest.last().text)
+        runtime.closeAll()
+    }
+
     private fun TestScope.createManager(backend: TerminalBackend): TerminalManager {
+        return createManager { backend }
+    }
+
+    private fun TestScope.createManager(backendFactory: (TerminalIdentity) -> TerminalBackend): TerminalManager {
         return TerminalManager(
             privilegeProvider = AvailableProvider,
             idGenerator = SequentialIdGenerator(),
             clock = FixedClock,
             scope = backgroundScope,
-            backendFactory = { _, _ -> backend },
+            backendFactory = { identity, _ -> backendFactory(identity) },
         )
     }
 
@@ -125,27 +314,64 @@ class LibTermRuntimeTest {
         override fun nowMillis(): Long = 100L
     }
 
-    private class BlockingBackend(
+    private class StreamingBackend(
         override val identity: TerminalIdentity,
-        private val onSend: suspend () -> Unit = {},
+        private val onSend: suspend (TerminalBytes) -> Unit = {},
     ) : TerminalBackend {
+        private val outputEvents = MutableSharedFlow<OutputChunk>(
+            replay = 0,
+            extraBufferCapacity = 16,
+        )
         private val exitResult = CompletableDeferred<TerminalFailure?>()
+        var onStart: (suspend () -> Unit)? = null
 
-        override val output: Flow<OutputChunk> = emptyFlow()
+        override val output: Flow<OutputChunk> = outputEvents
 
         override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
+            onStart?.invoke()
             return BackendStartResult.Started
         }
 
         override suspend fun send(input: TerminalBytes): SendResult {
-            onSend()
+            onSend(input)
             return SendResult.Sent
         }
 
         override suspend fun close() {
-            exitResult.complete(null)
+            if (!exitResult.isCompleted) {
+                exitResult.complete(null)
+            }
         }
 
         override suspend fun awaitExit(): TerminalFailure? = exitResult.await()
+
+        fun emitStdout(
+            text: String,
+            timestampMillis: Long = 100L,
+        ) {
+            outputEvents.tryEmit(
+                OutputChunk(
+                    stream = OutputStream.STDOUT,
+                    bytes = TerminalBytes.of(text.encodeToByteArray()),
+                    timestampMillis = timestampMillis,
+                ),
+            )
+        }
+    }
+
+    private class PassthroughSessionDecoder(
+        private val prefix: String = "",
+    ) : SessionTerminalOutputDecoder {
+        override fun decode(chunk: OutputChunk): List<TerminalTextChunk> {
+            return listOf(
+                TerminalTextChunk(
+                    stream = chunk.stream,
+                    text = prefix + chunk.bytes.toByteArray().decodeToString(),
+                    timestampMillis = chunk.timestampMillis,
+                ),
+            )
+        }
+
+        override fun reset() = Unit
     }
 }

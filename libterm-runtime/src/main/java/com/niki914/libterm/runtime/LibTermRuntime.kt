@@ -6,6 +6,7 @@ import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
 import com.niki914.libterm.TerminalOpenOptions
 import com.niki914.libterm.TerminalSession
+import com.niki914.libterm.runtime.internal.LambdaSessionOutputDecoder
 
 class LibTermRuntime internal constructor(
     private val manager: TerminalManager,
@@ -58,23 +59,29 @@ class LibTermRuntime internal constructor(
     suspend fun close(sessionId: String): Boolean {
         val closed = manager.close(sessionId)
         if (closed) {
-            synchronized(sessionLock) {
+            val removed = synchronized(sessionLock) {
                 sessionsById.remove(sessionId)
             }
+            removed?.dispose()
         }
         return closed
     }
 
     suspend fun closeAll(): Int {
         var closedCount = 0
+        val closedSessions = mutableListOf<LibTermSession>()
         for (session in manager.list()) {
             if (manager.close(session.id)) {
                 closedCount += 1
+                val removed = synchronized(sessionLock) {
+                    sessionsById.remove(session.id)
+                }
+                if (removed != null) {
+                    closedSessions += removed
+                }
             }
         }
-        synchronized(sessionLock) {
-            sessionsById.clear()
-        }
+        closedSessions.forEach(LibTermSession::dispose)
         return closedCount
     }
 
@@ -84,8 +91,18 @@ class LibTermRuntime internal constructor(
                 LibTermSession(
                     session = session,
                     closeSession = ::close,
+                    decoder = createSessionDecoder(),
                 )
             }
+        }
+    }
+
+    private fun createSessionDecoder(): SessionTerminalOutputDecoder {
+        val outputDecode = config.outputDecode
+        return if (outputDecode != null) {
+            LambdaSessionOutputDecoder(outputDecode)
+        } else {
+            config.outputDecoder.createSessionDecoder()
         }
     }
 }

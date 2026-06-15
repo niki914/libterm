@@ -12,13 +12,13 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.SessionState
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.runtime.LibTerm
 import com.niki914.libterm.runtime.Term
 import com.niki914.libterm.runtime.TermResult
+import com.niki914.libterm.runtime.TerminalTextChunk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -411,8 +411,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun appendOutput(state: DemoSessionViewState, chunk: OutputChunk) {
-        state.renderedText = (state.renderedText + chunk.decodeForDemo())
+    private fun appendOutput(state: DemoSessionViewState, chunk: TerminalTextChunk) {
+        state.renderedText = (state.renderedText + chunk.text)
             .takeLast(MAX_RENDER_CHARS)
         if (state == sessions[activeSessionIndex]) {
             outputView.text = state.renderedText
@@ -471,10 +471,6 @@ class MainActivity : Activity() {
             SessionState.Running -> "Running"
             SessionState.Starting -> "Starting"
         }
-    }
-
-    private fun OutputChunk.decodeForDemo(): String {
-        return bytes.toByteArray().decodeToString()
     }
 
     private data class DemoSessionViewState(

@@ -1,7 +1,6 @@
 package com.niki914.libterm.shellsmoke
 
 import android.content.Context
-import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.OpenResult
 import com.niki914.libterm.SessionState
 import com.niki914.libterm.TerminalIdentity
@@ -12,8 +11,10 @@ import com.niki914.libterm.runtime.LibTermSession
 import com.niki914.libterm.runtime.Term
 import com.niki914.libterm.runtime.TermResult
 import com.niki914.libterm.runtime.TerminalOpenSpec
+import com.niki914.libterm.runtime.TerminalTextChunk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+@OptIn(ExperimentalCoroutinesApi::class)
 internal class RuntimeTermAdapter(
     context: Context,
     scope: CoroutineScope,
@@ -37,8 +39,8 @@ internal class RuntimeTermAdapter(
     )
     private val lifecycleMutex = Mutex()
     private val stateEvents = MutableStateFlow<SessionState>(SessionState.Closed)
-    private val outputEvents = MutableSharedFlow<OutputChunk>(
-        replay = 0,
+    private val outputEvents = MutableSharedFlow<TerminalTextChunk>(
+        replay = OUTPUT_REPLAY_CAPACITY,
         extraBufferCapacity = 64,
     )
 
@@ -47,7 +49,7 @@ internal class RuntimeTermAdapter(
     private var outputJob: Job? = null
 
     override val state: StateFlow<SessionState> = stateEvents.asStateFlow()
-    override val stream: Flow<OutputChunk> = outputEvents.asSharedFlow()
+    override val stream: Flow<TerminalTextChunk> = outputEvents.asSharedFlow()
 
     override suspend fun open(): TermResult<Unit> {
         return when (val result = ensureSession()) {
@@ -83,6 +85,7 @@ internal class RuntimeTermAdapter(
         val existing = lifecycleMutex.withLock {
             val current = session
             session = null
+            outputEvents.resetReplayCache()
             stateJob?.cancel()
             stateJob = null
             outputJob?.cancel()
@@ -121,6 +124,8 @@ internal class RuntimeTermAdapter(
     private fun bindSessionLocked(newSession: LibTermSession) {
         session = newSession
         stateEvents.value = newSession.state.value
+        outputEvents.resetReplayCache()
+        newSession.latest(Int.MAX_VALUE).forEach(outputEvents::tryEmit)
         stateJob?.cancel()
         outputJob?.cancel()
         stateJob = streamScope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -132,16 +137,21 @@ internal class RuntimeTermAdapter(
     }
 
     private val streamScope: CoroutineScope = scope
+
+    private companion object {
+        const val OUTPUT_REPLAY_CAPACITY: Int = 64
+    }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 internal class LazyTermAdapter(
     scope: CoroutineScope,
     private val createTerm: () -> Term,
 ) : Term {
     private val lifecycleMutex = Mutex()
     private val stateEvents = MutableStateFlow<SessionState>(SessionState.Closed)
-    private val outputEvents = MutableSharedFlow<OutputChunk>(
-        replay = 0,
+    private val outputEvents = MutableSharedFlow<TerminalTextChunk>(
+        replay = OUTPUT_REPLAY_CAPACITY,
         extraBufferCapacity = 64,
     )
 
@@ -150,7 +160,7 @@ internal class LazyTermAdapter(
     private var outputJob: Job? = null
 
     override val state: StateFlow<SessionState> = stateEvents.asStateFlow()
-    override val stream: Flow<OutputChunk> = outputEvents.asSharedFlow()
+    override val stream: Flow<TerminalTextChunk> = outputEvents.asSharedFlow()
 
     override suspend fun open(): TermResult<Unit> {
         val activeTerm = ensureTerm()
@@ -211,6 +221,7 @@ internal class LazyTermAdapter(
 
     private fun clearTermLocked() {
         term = null
+        outputEvents.resetReplayCache()
         stateJob?.cancel()
         stateJob = null
         outputJob?.cancel()
@@ -218,4 +229,8 @@ internal class LazyTermAdapter(
     }
 
     private val streamScope: CoroutineScope = scope
+
+    private companion object {
+        const val OUTPUT_REPLAY_CAPACITY: Int = 64
+    }
 }

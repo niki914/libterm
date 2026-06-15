@@ -29,6 +29,7 @@ internal object TerminalCommandExecutor {
 
         return coroutineScope {
             val collectorJob = launch(start = CoroutineStart.UNDISPATCHED) {
+                // exec marker 解析必须继续消费 raw bytes，不能接入文本 decoder。
                 session.output.collect { chunk ->
                     when (chunk.stream) {
                         OutputStream.STDOUT -> {

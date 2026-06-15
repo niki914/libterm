@@ -66,6 +66,7 @@ class TerminalSession(
             return pendingStart.await()
         }
 
+        ensureOutputCollectionStarted()
         val startResult = try {
             backend.start(openOptions)
         } catch (error: Throwable) {
@@ -129,7 +130,9 @@ class TerminalSession(
         }
 
         if (shouldLaunchBackgroundJobs) {
-            launchBackgroundJobs()
+            ensureExitAwaitStarted()
+        } else if (startResult is BackendStartResult.Failed) {
+            cancelOutputCollection()
         }
         if (shouldInvokeCloseAfterStart) {
             invokeCloseIfNeeded()
@@ -237,7 +240,7 @@ class TerminalSession(
         return pendingClose.await()
     }
 
-    private fun launchBackgroundJobs() {
+    private fun ensureOutputCollectionStarted() {
         synchronized(lifecycleLock) {
             if (outputCollectionJob == null) {
                 outputCollectionJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -254,13 +257,24 @@ class TerminalSession(
                     }
                 }
             }
+        }
+    }
 
+    private fun ensureExitAwaitStarted() {
+        synchronized(lifecycleLock) {
             if (exitAwaitJob == null) {
                 exitAwaitJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                     val exitFailure = awaitExitSafely()
                     applyExitResult(exitFailure)
                 }
             }
+        }
+    }
+
+    private fun cancelOutputCollection() {
+        synchronized(lifecycleLock) {
+            outputCollectionJob?.cancel()
+            outputCollectionJob = null
         }
     }
 

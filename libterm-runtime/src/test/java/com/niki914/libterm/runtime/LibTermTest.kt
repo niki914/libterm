@@ -1,17 +1,17 @@
 package com.niki914.libterm.runtime
 
 import android.content.Context
-import android.content.ContextWrapper
 import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.OutputStream
 import com.niki914.libterm.TerminalBytes
 import kotlinx.coroutines.test.TestScope
-import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class LibTermTest {
 
@@ -63,20 +63,11 @@ class LibTermTest {
     }
 
     @Test
-    fun `runtime production source does not add text state boundary`() {
-        val productionSource = runtimeProductionSource()
-            .walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .joinToString(separator = "\n") { it.readText() }
+    fun `runtime config defaults to ansi stripping decoder`() {
+        val config = LibTermRuntimeConfig()
 
-        val forbiddenTokens = listOf(
-            "LibTermFacade",
-            "TerminalText",
-            "bytesToText",
-            "decodeToString",
-            "textState",
-        )
-        assertEquals(emptyList(), forbiddenTokens.filter { it in productionSource })
+        assertIs<AnsiStrippingTerminalOutputDecoder>(config.outputDecoder)
+        assertNull(config.outputDecode)
     }
 
     @Test
@@ -93,20 +84,25 @@ class LibTermTest {
         assertContentEquals(byteArrayOf(0x00, 0xC3.toByte(), 0x0A), chunk.bytes.toByteArray())
     }
 
-    private fun runtimeProductionSource(): File {
-        var current: File? = File(requireNotNull(System.getProperty("user.dir")))
-        while (current != null) {
-            val candidate =
-                File(current, "libterm-runtime/src/main/java/com/niki914/libterm/runtime")
-            if (candidate.isDirectory) {
-                return candidate
-            }
-            current = current.parentFile
-        }
-        error("Could not find libterm-runtime production source")
-    }
-
-    private class RuntimeTestContext : ContextWrapper(null) {
-        override fun getApplicationContext(): Context = this
+    @Test
+    fun `libterm facade still exposes simple term entries`() {
+        assertTrue(LibTerm.openUserTerm() is Term)
+        assertTrue(LibTerm.openSuTerm() is Term)
+        assertTrue(
+            LibTerm.openSshTerm(
+                host = "127.0.0.1",
+                port = 2222,
+                username = "bytedance",
+                password = "secret",
+            ) is Term,
+        )
+        assertEquals(
+            Term::class.java,
+            LibTerm::class.java.getDeclaredMethod(
+                "openShizukuTerm",
+                Context::class.java,
+                String::class.java,
+            ).returnType,
+        )
     }
 }

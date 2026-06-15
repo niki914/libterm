@@ -1,13 +1,12 @@
 package com.niki914.libterm.runtime
 
-import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.SessionState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 interface Term {
     val state: StateFlow<SessionState>
-    val stream: Flow<OutputChunk>
+    val stream: Flow<TerminalTextChunk>
 
     suspend fun open(): TermResult<Unit>
 
