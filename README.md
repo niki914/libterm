@@ -6,8 +6,8 @@ English | **[中文](README_zh_CN.md)**
 
 # libterm
 
-An Android terminal session library built on top of libsu and Shizuku.
-The recommended public entry points are `LibTerm.runtime()` for multi-session hosts and `LibTerm.openUserTerm()` / `LibTerm.openSuTerm()` / `LibTerm.openShizukuTerm(context)` for single-session wrappers.
+An Android terminal session library built on top of libsu, Shizuku, and an SSH backend.
+The recommended public entry points are `LibTerm.runtime()` for multi-session hosts and `LibTerm.openUserTerm()` / `LibTerm.openSuTerm()` / `LibTerm.openShizukuTerm(context)` / `LibTerm.openSshTerm(...)` for single-session wrappers.
 
 ## Demo
 
@@ -17,8 +17,8 @@ This repository contains a runnable smoke demo app:
 
 ## Features
 
-- Multi-identity shells: `USER`, `ROOT`, `SHIZUKU`
-- Kotlin-first runtime API: `runtime.open { ... }` and `open*Term(cwd = ...)`
+- Multi-identity shells: `USER`, `ROOT`, `SHIZUKU`, `SSH`
+- Kotlin-first runtime API: `runtime.open { ... }` and `open*Term(...)`
 - Multi-session host via `LibTermRuntime`
 - Initial working directory support via `cwd`
 - Dual interaction model: blocking `exec` and streaming `open + write + stream`
@@ -40,11 +40,11 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.github.niki914.libterm:libterm-runtime:v1-0.1")
+    implementation("com.github.niki914.libterm:libterm-runtime:v2-0.2")
 }
 ```
 
-`libterm-runtime` exposes the main Android-facing API and wires libsu + Shizuku backends internally.
+`libterm-runtime` exposes the main Android-facing API and wires libsu, Shizuku, and SSH backends internally.
 
 ## Runtime First API
 
@@ -84,7 +84,7 @@ launch {
 
 ### Single session: `LibTerm.open*Term()`
 
-Use `openUserTerm`, `openSuTerm`, or `openShizukuTerm` when you only need one interactive session wrapper.
+Use `openUserTerm`, `openSuTerm`, `openShizukuTerm`, or `openSshTerm` when you only need one interactive session wrapper.
 
 ```kotlin
 import com.niki914.libterm.runtime.LibTerm
@@ -161,6 +161,7 @@ Identity mapping:
 | `USER` | libsu | Regular shell without root authorization |
 | `ROOT` | libsu | Root shell, requires root capability and authorization |
 | `SHIZUKU` | Shizuku | Shizuku shell, requires `context`, a running Shizuku environment, and authorization |
+| `SSH` | SSH | Remote SSH shell, requires SSH host / port / username / password in open options |
 
 The default authorization mode is `AuthorizationMode.REQUEST_IF_NEEDED`. To check without prompting:
 
@@ -173,7 +174,7 @@ val result = runtime.open {
 
 ## Single-session Helpers
 
-Each helper accepts an optional `cwd` and returns a lazy `Term`; the shell is opened by the first `open()`, `exec()`, or `write()` call.
+Each helper returns a lazy `Term`; the shell is opened by the first `open()`, `exec()`, or `write()` call. `openUserTerm`, `openSuTerm`, and `openShizukuTerm` accept an optional `cwd`, while `openSshTerm` accepts SSH connection arguments.
 
 ```kotlin
 val user = LibTerm.openUserTerm(cwd = "/sdcard")
@@ -181,6 +182,11 @@ val root = LibTerm.openSuTerm(cwd = "/data/local/tmp")
 val shizuku = LibTerm.openShizukuTerm(
     context = applicationContext,
     cwd = "/sdcard/Download",
+)
+val ssh = LibTerm.openSshTerm(
+    host = "192.168.1.10",
+    username = "shell",
+    password = "password",
 )
 ```
 

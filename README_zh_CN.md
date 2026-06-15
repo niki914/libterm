@@ -6,8 +6,8 @@
 
 # libterm
 
-一个面向 Android 的终端会话库，基于 libsu 与 Shizuku 提供 `USER`、`ROOT`、`SHIZUKU` 三类 shell 会话。
-当前推荐以 `LibTerm.runtime()` 管理多会话，以 `LibTerm.openUserTerm()` / `LibTerm.openSuTerm()` / `LibTerm.openShizukuTerm(context)` 创建单会话包装。
+一个面向 Android 的终端会话库，基于 libsu、Shizuku 与 SSH 后端提供 `USER`、`ROOT`、`SHIZUKU`、`SSH` 四类 shell 会话。
+当前推荐以 `LibTerm.runtime()` 管理多会话，以 `LibTerm.openUserTerm()` / `LibTerm.openSuTerm()` / `LibTerm.openShizukuTerm(context)` / `LibTerm.openSshTerm(...)` 创建单会话包装。
 
 ## Demo
 
@@ -17,8 +17,8 @@
 
 ## Features
 
-- 多身份支持：`USER`、`ROOT`、`SHIZUKU`
-- Kotlin-first 入口：`runtime.open { ... }` 与 `open*Term(cwd = ...)`
+- 多身份支持：`USER`、`ROOT`、`SHIZUKU`、`SSH`
+- Kotlin-first 入口：`runtime.open { ... }` 与 `open*Term(...)`
 - 多会话能力：`LibTermRuntime` 支持同时打开、列举、关闭多个 session
 - 初始目录语义：`cwd` 只作用于打开时的初始工作目录
 - 双模式交互：阻塞式 `exec` 与流式 `open + write + stream`
@@ -40,11 +40,11 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.github.niki914.libterm:libterm-runtime:v1-0.1")
+    implementation("com.github.niki914.libterm:libterm-runtime:v2-0.2")
 }
 ```
 
-`libterm-runtime` 面向 Android 调用方暴露主要 API，并在内部组装 libsu 与 Shizuku 后端。
+`libterm-runtime` 面向 Android 调用方暴露主要 API，并在内部组装 libsu、Shizuku 与 SSH 后端。
 
 ## Runtime First API
 
@@ -84,7 +84,7 @@ launch {
 
 ### 单会话：`LibTerm.open*Term()`
 
-`openUserTerm`、`openSuTerm`、`openShizukuTerm` 适合“拿一个交互式会话就用”的场景。
+`openUserTerm`、`openSuTerm`、`openShizukuTerm`、`openSshTerm` 适合“拿一个交互式会话就用”的场景。
 
 ```kotlin
 import com.niki914.libterm.runtime.LibTerm
@@ -161,6 +161,7 @@ TerminalOpenOptions(cwd = "/sdcard/Download")
 | `USER` | libsu | 普通 shell，不需要 Root 授权 |
 | `ROOT` | libsu | Root shell，需要设备具备 Root 能力并授权 |
 | `SHIZUKU` | Shizuku | Shizuku shell，需要 `context`、Shizuku 运行环境与授权 |
+| `SSH` | SSH | 远端 SSH shell，需要在打开参数中提供 host / port / username / password |
 
 默认权限模式是 `AuthorizationMode.REQUEST_IF_NEEDED`。如果你需要只检查、不触发授权流程：
 
@@ -173,7 +174,7 @@ val result = runtime.open {
 
 ## 单会话辅助入口
 
-每个辅助入口都接受可选 `cwd`，并返回懒打开的 `Term`；首次调用 `open()`、`exec()` 或 `write()` 时才会真正打开 shell。
+每个辅助入口都返回懒打开的 `Term`；首次调用 `open()`、`exec()` 或 `write()` 时才会真正打开 shell。`openUserTerm`、`openSuTerm`、`openShizukuTerm` 接受可选 `cwd`，`openSshTerm` 接受 SSH 连接参数。
 
 ```kotlin
 val user = LibTerm.openUserTerm(cwd = "/sdcard")
@@ -181,6 +182,11 @@ val root = LibTerm.openSuTerm(cwd = "/data/local/tmp")
 val shizuku = LibTerm.openShizukuTerm(
     context = applicationContext,
     cwd = "/sdcard/Download",
+)
+val ssh = LibTerm.openSshTerm(
+    host = "192.168.1.10",
+    username = "shell",
+    password = "password",
 )
 ```
 
