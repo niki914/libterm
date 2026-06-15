@@ -9,7 +9,7 @@
 | 能力 / 链路 | 状态 | 源码证据 | 边界 |
 |:--|:--|:--|:--|
 | smoke app 启动入口 | `Stable` | `shell-smoke-app/src/main/AndroidManifest.xml` | Manifest 注册了 launcher Activity |
-| 三类身份交互验证 | `Stable` | `shell-smoke-app/src/main/java/com/niki914/libterm/shellsmoke/MainActivity.kt` | UI 中直接创建 `USER`、`ROOT`、`SHIZUKU` 三类 `Term` |
+| 四类身份交互验证 | `Stable` | `shell-smoke-app/src/main/java/com/niki914/libterm/shellsmoke/MainActivity.kt` | UI 中直接创建 `USER`、`ROOT`、`SHIZUKU`、`SSH` 四类 `Term` |
 | ADB 广播执行验证 | `Stable` | `shell-smoke-app/src/main/java/com/niki914/libterm/shellsmoke/AdbCommandReceiver.kt` | 可通过广播触发 `exec` 并返回 JSON 结果 |
 
 ## 关键源码
@@ -30,14 +30,14 @@
 ## 核心链路
 
 1. `AndroidManifest.xml` 暴露 launcher 和 `com.niki914.libterm.shellsmoke.action.EXEC` 广播入口。
-2. `MainActivity.kt` 在 `onCreate` 内创建三类 `Term` 并允许手工发送输入。
+2. `MainActivity.kt` 在 `onCreate` 内创建四类 `Term`，其中 SSH 会话额外暴露 host / port / user / password 输入框。
 3. `AdbCommandReceiver.kt` 根据广播 extras 创建对应 identity 的 `Term`，执行 `exec` 后返回结果 JSON。
 
 ## 调试 / 阅读关注点
 
 | 问题 | 先看 | 判断标准 |
 |:--|:--|:--|
-| 想手工观察三类身份切换 | `shell-smoke-app/src/main/java/com/niki914/libterm/shellsmoke/MainActivity.kt` | 是否存在三类 session view state 和切换按钮 |
+| 想手工观察四类身份切换 | `shell-smoke-app/src/main/java/com/niki914/libterm/shellsmoke/MainActivity.kt` | 是否存在四类 session view state、切换按钮和 SSH 配置区域 |
 | 想从命令行拿到结构化结果 | `shell-smoke-app/src/main/java/com/niki914/libterm/shellsmoke/AdbCommandReceiver.kt` | 是否把 stdout、stderr、exitCode、timedOut 写进 JSON |
 | 想确认广播 action 和导出入口 | `shell-smoke-app/src/main/AndroidManifest.xml` | 是否注册公开 receiver 和 action 名称 |
 
@@ -45,7 +45,7 @@
 
 | 相关页面 | 关系 |
 |:--|:--|
-| `domains/identities/index.md` | 说明 demo 中三类 identity 的授权差异 |
+| `domains/identities/index.md` | 说明 demo 中四类 identity 的授权差异 |
 | `architecture/command-execution.md` | 说明 receiver 内部调用的 `exec` 语义 |
 | `reference/source-map.md` | 提供完整 demo 入口路径 |
 

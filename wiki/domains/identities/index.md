@@ -2,15 +2,15 @@
 
 ## 定位
 
-本页回答 `USER`、`ROOT`、`SHIZUKU` 三类身份分别走哪条 availability 和 authorization 路径。主要入口是 `libterm-core/src/main/kotlin/com/niki914/libterm/TerminalIdentity.kt`、`libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeProvider.kt`、`libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeAuthorizer.kt`。
+本页回答 `USER`、`ROOT`、`SHIZUKU`、`SSH` 四类身份分别走哪条 availability 和 authorization 路径。主要入口是 `libterm-core/src/main/kotlin/com/niki914/libterm/TerminalIdentity.kt`、`libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeProvider.kt`、`libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeAuthorizer.kt`。
 
 ## 状态判断
 
 | 能力 / 链路 | 状态 | 源码证据 | 边界 |
 |:--|:--|:--|:--|
-| identity 枚举 | `Stable` | `libterm-core/src/main/kotlin/com/niki914/libterm/TerminalIdentity.kt` | 只有 `User`、`Su`、`Shizuku` 三类身份 |
-| runtime 层 availability 分发 | `Stable` | `libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeProvider.kt` | `User` / `Su` 走 libsu provider，`Shizuku` 走 shizuku provider |
-| runtime 层 authorization 分发 | `Stable` | `libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeAuthorizer.kt` | `User` / `Su` 复用 libsu availability 结果，`Shizuku` 走专门 authorizer |
+| identity 枚举 | `Stable` | `libterm-core/src/main/kotlin/com/niki914/libterm/TerminalIdentity.kt` | 包含 `User`、`Su`、`Shizuku`、`Ssh` 四类身份 |
+| runtime 层 availability 分发 | `Stable` | `libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeProvider.kt` | `User` / `Su` 走 libsu provider，`Shizuku` 走 shizuku provider，`Ssh` 直接返回 available |
+| runtime 层 authorization 分发 | `Stable` | `libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeAuthorizer.kt` | `User` / `Su` 复用 libsu availability 结果，`Shizuku` 走专门 authorizer，`Ssh` 直接 granted |
 | Shizuku 授权请求 | `Stable` | `libterm-backend-shizuku/src/main/java/com/niki914/libterm/backend/shizuku/ShizukuPrivilegeAuthorizer.kt` | 包含 binder alive 检查、权限请求和超时处理 |
 | Shizuku Provider 注册 | `Stable` | `libterm-backend-shizuku/src/main/AndroidManifest.xml` | 清单中注册 `rikka.shizuku.ShizukuProvider` |
 
@@ -38,9 +38,9 @@
 
 ## 核心链路
 
-1. `TerminalIdentity.kt` 定义 `User`、`Su`、`Shizuku` 三个身份。
-2. `RuntimePrivilegeProvider.kt` 先按身份把 availability 判断路由到 libsu 或 Shizuku provider。
-3. `RuntimePrivilegeAuthorizer.kt` 再把授权请求路由到 libsu availability 结果或 `ShizukuPrivilegeAuthorizer.kt`。
+1. `TerminalIdentity.kt` 定义 `User`、`Su`、`Shizuku`、`Ssh` 四个身份。
+2. `RuntimePrivilegeProvider.kt` 先按身份把 availability 判断路由到 libsu provider、Shizuku provider，或直接返回 SSH 可用。
+3. `RuntimePrivilegeAuthorizer.kt` 再把授权请求路由到 libsu availability 结果、`ShizukuPrivilegeAuthorizer.kt`，或直接给出 SSH 已授权。
 
 ## 调试 / 阅读关注点
 
@@ -49,6 +49,7 @@
 | 为什么 `User` 不需要额外授权 | `libterm-backend-libsu/src/main/java/com/niki914/libterm/backend/libsu/LibsuPrivilegeProvider.kt` | `TerminalIdentity.User` 是否直接返回 available |
 | 为什么 `Shizuku` 会先报 unavailable 再报 denied | `libterm-backend-shizuku/src/main/java/com/niki914/libterm/backend/shizuku/ShizukuPrivilegeProvider.kt` | 是否区分未安装/未运行与未授权两种状态 |
 | Shizuku 权限请求从哪里发起 | `libterm-backend-shizuku/src/main/java/com/niki914/libterm/backend/shizuku/ShizukuPrivilegeAuthorizer.kt` | 是否通过 requester 注册 listener、发请求并等待回调 |
+| 为什么 `Ssh` 不走本地权限申请 | `libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeProvider.kt`, `libterm-runtime/src/main/java/com/niki914/libterm/runtime/internal/RuntimePrivilegeAuthorizer.kt` | 是否在 runtime 层直接视为 available / granted |
 
 ## 与其他页面关系
 

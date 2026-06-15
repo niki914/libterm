@@ -8,9 +8,9 @@
 
 | 能力 / 链路 | 状态 | 源码证据 | 边界 |
 |:--|:--|:--|:--|
-| 多模块工程拆分 | `Stable` | `settings.gradle.kts` | 仓库被拆成 core、runtime、两个 backend 和 smoke app |
+| 多模块工程拆分 | `Stable` | `settings.gradle.kts` | 仓库被拆成 core、runtime、三个 backend 和 smoke app |
 | 公开 `Term` API | `Stable` | `libterm-runtime/src/main/java/com/niki914/libterm/runtime/Term.kt` | 对外只暴露 `open`、`exec`、`write`、`close`、`state`、`stream` |
-| 默认门面创建入口 | `Stable` | `libterm-runtime/src/main/java/com/niki914/libterm/runtime/LibTerm.kt` | 统一提供 `newUserTerm`、`newSuTerm`、`newShizukuTerm` 和默认 manager |
+| 默认门面创建入口 | `Stable` | `libterm-runtime/src/main/java/com/niki914/libterm/runtime/LibTerm.kt` | 统一提供 `runtime`、`openUserTerm`、`openSuTerm`、`openShizukuTerm`、`openSshTerm` |
 | 失败模型 | `Stable` | `libterm-core/src/main/kotlin/com/niki914/libterm/TerminalFailure.kt`, `libterm-runtime/src/main/java/com/niki914/libterm/runtime/TermResult.kt` | 错误通过 `TerminalFailure` 和 `TermResult` 暴露给上层 |
 
 ## 关键源码
@@ -19,7 +19,7 @@
 
 | 文件 | 关键符号 | 职责 |
 |:--|:--|:--|
-| `LibTerm.kt` | `LibTerm` | 负责创建默认 manager 和三类 `Term` |
+| `LibTerm.kt` | `LibTerm` | 负责创建默认 runtime，并暴露四类 `Term` 入口 |
 | `Term.kt` | `Term` | 定义对外 API 面 |
 | `CommandResult.kt` | `CommandResult` | 描述 `exec` 返回的 stdout、stderr、exitCode、timedOut |
 | `TermResult.kt` | `TermResult` | 统一成功/失败返回壳 |
@@ -50,7 +50,7 @@
 |:--|:--|
 | `reference/source-map.md` | 提供本页涉及入口的完整源码导航 |
 | `architecture/runtime-core-backend.md` | 展开默认装配和 manager 主链路 |
-| `domains/identities/index.md` | 展开三类身份的差异和授权边界 |
+| `domains/identities/index.md` | 展开四类身份的差异和授权边界 |
 
 ## 缺口
 
