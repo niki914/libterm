@@ -2,6 +2,8 @@ package com.niki914.libterm.runtime
 
 import android.content.Context
 import com.niki914.libterm.AuthorizationMode
+import com.niki914.libterm.SshAuth
+import com.niki914.libterm.SshOpenOptions
 import com.niki914.libterm.TerminalBackend
 import com.niki914.libterm.TerminalBufferConfig
 import com.niki914.libterm.TerminalIdentity
@@ -47,7 +49,7 @@ object LibTerm {
         return createTerm(
             context = null,
             identity = TerminalIdentity.User,
-            cwd = cwd,
+            openOptions = TerminalOpenOptions(cwd = cwd),
         )
     }
 
@@ -57,7 +59,7 @@ object LibTerm {
         return createTerm(
             context = null,
             identity = TerminalIdentity.Su,
-            cwd = cwd,
+            openOptions = TerminalOpenOptions(cwd = cwd),
         )
     }
 
@@ -68,14 +70,34 @@ object LibTerm {
         return createTerm(
             context = context,
             identity = TerminalIdentity.Shizuku,
-            cwd = cwd,
+            openOptions = TerminalOpenOptions(cwd = cwd),
+        )
+    }
+
+    fun openSshTerm(
+        host: String,
+        port: Int = SshOpenOptions.DEFAULT_PORT,
+        username: String,
+        password: String,
+    ): Term {
+        return createTerm(
+            context = null,
+            identity = TerminalIdentity.Ssh,
+            openOptions = TerminalOpenOptions(
+                ssh = SshOpenOptions(
+                    host = host,
+                    port = port,
+                    username = username,
+                    auth = SshAuth.Password(password),
+                ),
+            ),
         )
     }
 
     private fun createTerm(
         context: Context?,
         identity: TerminalIdentity,
-        cwd: String?,
+        openOptions: TerminalOpenOptions,
     ): Term {
         val termScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         return DefaultTerm(
@@ -88,7 +110,7 @@ object LibTerm {
             ),
             identity = identity,
             authorizationMode = AuthorizationMode.REQUEST_IF_NEEDED,
-            openOptions = TerminalOpenOptions(cwd = cwd),
+            openOptions = openOptions,
             scope = termScope,
             ownsScope = true,
         )

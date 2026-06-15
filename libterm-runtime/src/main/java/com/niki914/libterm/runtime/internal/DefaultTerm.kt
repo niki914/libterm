@@ -121,6 +121,7 @@ internal class DefaultTerm(
                 identity = this@DefaultTerm.identity
                 authorizationMode = this@DefaultTerm.authorizationMode
                 cwd = this@DefaultTerm.openOptions.cwd
+                sshOptions = this@DefaultTerm.openOptions.ssh
             }) {
                 is OpenResult.Success -> {
                     bindSessionLocked(opened.value)

@@ -8,11 +8,14 @@ import com.niki914.libterm.OutputChunk
 import com.niki914.libterm.OutputStream
 import com.niki914.libterm.PrivilegeProvider
 import com.niki914.libterm.SendResult
+import com.niki914.libterm.SshAuth
+import com.niki914.libterm.SshOpenOptions
 import com.niki914.libterm.TerminalBackend
 import com.niki914.libterm.TerminalBytes
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
 import com.niki914.libterm.TerminalManager
+import com.niki914.libterm.TerminalOpenOptions
 import com.niki914.libterm.runtime.internal.DefaultTerm
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -122,6 +125,38 @@ class DefaultTermTest {
         assertEquals(1, backend.startCallCount)
     }
 
+    @Test
+    fun `open passes ssh options to manager`() = runTest {
+        val sshOptions = SshOpenOptions(
+            host = "127.0.0.1",
+            port = 2222,
+            username = "bytedance",
+            auth = SshAuth.Password("secret"),
+        )
+        val backend = RecordingBackend(TerminalIdentity.Ssh)
+        val manager = TerminalManager(
+            privilegeProvider = AvailableProvider,
+            idGenerator = CountingIdGenerator(),
+            clock = FixedClock,
+            scope = backgroundScope,
+            backendFactory = { _, _ -> backend },
+        )
+        val term = DefaultTerm(
+            runtime = LibTermRuntime(manager),
+            identity = TerminalIdentity.Ssh,
+            authorizationMode = com.niki914.libterm.AuthorizationMode.REQUEST_IF_NEEDED,
+            openOptions = TerminalOpenOptions(ssh = sshOptions),
+            scope = backgroundScope,
+            ownsScope = false,
+        )
+
+        val result = term.open()
+
+        assertIs<TermResult.Success<Unit>>(result)
+        assertEquals(sshOptions, backend.lastStartOptions?.ssh)
+        term.close()
+    }
+
     private fun kotlinx.coroutines.test.TestScope.createTerm(backend: RecordingBackend): Term {
         val manager = TerminalManager(
             privilegeProvider = AvailableProvider,
@@ -168,13 +203,16 @@ class DefaultTermTest {
 
         var onSend: (suspend (TerminalBytes) -> Unit)? = null
         var startGate: CompletableDeferred<Unit>? = null
+        var lastStartOptions: TerminalOpenOptions? = null
+            private set
         var startCallCount: Int = 0
             private set
 
         override val output: Flow<OutputChunk> = outputEvents
 
-        override suspend fun start(openOptions: com.niki914.libterm.TerminalOpenOptions): BackendStartResult {
+        override suspend fun start(openOptions: TerminalOpenOptions): BackendStartResult {
             startCallCount += 1
+            lastStartOptions = openOptions
             startGate?.await()
             return BackendStartResult.Started
         }

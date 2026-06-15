@@ -50,6 +50,19 @@ class LibTermTest {
     }
 
     @Test
+    fun `libterm exposes ssh simple term entry`() {
+        val method = LibTerm::class.java.getDeclaredMethod(
+            "openSshTerm",
+            String::class.java,
+            Int::class.javaPrimitiveType,
+            String::class.java,
+            String::class.java,
+        )
+
+        assertEquals(Term::class.java, method.returnType)
+    }
+
+    @Test
     fun `runtime production source does not add text state boundary`() {
         val productionSource = runtimeProductionSource()
             .walkTopDown()

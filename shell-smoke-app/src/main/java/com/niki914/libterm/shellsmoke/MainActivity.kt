@@ -13,8 +13,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.niki914.libterm.OutputChunk
+import com.niki914.libterm.SessionState
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.runtime.LibTerm
 import com.niki914.libterm.runtime.Term
 import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +35,11 @@ class MainActivity : Activity() {
     private lateinit var statusView: TextView
     private lateinit var outputView: TextView
     private lateinit var inputView: EditText
+    private lateinit var sshConfigRow: LinearLayout
+    private lateinit var sshHostInput: EditText
+    private lateinit var sshPortInput: EditText
+    private lateinit var sshUsernameInput: EditText
+    private lateinit var sshPasswordInput: EditText
     private val actionButtons: MutableList<Button> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,6 +47,7 @@ class MainActivity : Activity() {
         sessions = listOf(
             DemoSessionViewState(
                 label = "USER",
+                termIdentity = TerminalIdentity.User,
                 term = RuntimeTermAdapter(
                     context = applicationContext,
                     scope = uiScope,
@@ -48,6 +56,7 @@ class MainActivity : Activity() {
             ),
             DemoSessionViewState(
                 label = "ROOT",
+                termIdentity = TerminalIdentity.Su,
                 term = RuntimeTermAdapter(
                     context = applicationContext,
                     scope = uiScope,
@@ -56,10 +65,26 @@ class MainActivity : Activity() {
             ),
             DemoSessionViewState(
                 label = "SHIZUKU",
+                termIdentity = TerminalIdentity.Shizuku,
                 term = RuntimeTermAdapter(
                     context = applicationContext,
                     scope = uiScope,
                     identity = TerminalIdentity.Shizuku,
+                ),
+            ),
+            DemoSessionViewState(
+                label = "SSH",
+                termIdentity = TerminalIdentity.Ssh,
+                term = LazyTermAdapter(
+                    scope = uiScope,
+                    createTerm = {
+                        LibTerm.openSshTerm(
+                            host = sshHostText(),
+                            port = sshPortText(),
+                            username = sshUsernameInput.text.toString(),
+                            password = sshPasswordInput.text.toString(),
+                        )
+                    },
                 ),
             ),
         )
@@ -70,6 +95,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         sessions.forEach { state ->
             state.renderJob?.cancel()
+            state.stateJob?.cancel()
         }
         cleanupScope.launch {
             sessions.forEach { state ->
@@ -96,6 +122,7 @@ class MainActivity : Activity() {
 
         createSessionButtons(root)
         createToolbar(root)
+        createSshConfig(root)
 
         statusView = TextView(this).apply {
             textSize = 14f
@@ -202,6 +229,62 @@ class MainActivity : Activity() {
         root.addView(toolbar)
     }
 
+    private fun createSshConfig(root: LinearLayout) {
+        sshConfigRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.BLACK)
+        }
+        sshHostInput = sshConfigEditText(
+            hint = "host",
+            text = DEFAULT_SSH_HOST,
+            inputType = InputType.TYPE_CLASS_TEXT,
+        )
+        sshPortInput = sshConfigEditText(
+            hint = "port",
+            text = DEFAULT_SSH_PORT.toString(),
+            inputType = InputType.TYPE_CLASS_NUMBER,
+        )
+        sshUsernameInput = sshConfigEditText(
+            hint = "user",
+            text = "",
+            inputType = InputType.TYPE_CLASS_TEXT,
+        )
+        sshPasswordInput = sshConfigEditText(
+            hint = "password",
+            text = "",
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+        )
+        listOf(sshHostInput, sshPortInput, sshUsernameInput, sshPasswordInput).forEach { input ->
+            sshConfigRow.addView(
+                input,
+                LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f,
+                ),
+            )
+        }
+        root.addView(sshConfigRow)
+    }
+
+    private fun sshConfigEditText(
+        hint: String,
+        text: String,
+        inputType: Int,
+    ): EditText {
+        return EditText(this).apply {
+            setSingleLine(true)
+            this.hint = hint
+            setText(text)
+            this.inputType = inputType
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            setBackgroundColor(Color.BLACK)
+        }
+    }
+
     private fun toolbarButton(text: String, onClick: () -> Unit): Button {
         return button(text, onClick).trackAction().apply {
             setTextColor(Color.WHITE)
@@ -225,6 +308,9 @@ class MainActivity : Activity() {
         if (state.renderJob == null) {
             state.renderJob = startRenderJob(state)
         }
+        if (state.stateJob == null) {
+            state.stateJob = startStateJob(state)
+        }
         renderUi("OPENED: ${state.label}")
     }
 
@@ -232,7 +318,7 @@ class MainActivity : Activity() {
         activeSessionIndex = index
         val state = sessions[index]
         renderUi("SELECTED: ${state.label}")
-        if (state.renderJob == null) {
+        if (state.renderJob == null && state.termIdentity != TerminalIdentity.Ssh) {
             openSession(state)
         }
     }
@@ -251,6 +337,9 @@ class MainActivity : Activity() {
                 is TermResult.Success -> {
                     if (state.renderJob == null) {
                         state.renderJob = startRenderJob(state)
+                    }
+                    if (state.stateJob == null) {
+                        state.stateJob = startStateJob(state)
                     }
                 }
             }
@@ -312,6 +401,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun startStateJob(state: DemoSessionViewState): Job {
+        return uiScope.launch {
+            state.term.state.collect { sessionState ->
+                if (state == sessions[activeSessionIndex]) {
+                    setStatus("${state.label}: ${sessionState.describeForDemo()}")
+                }
+            }
+        }
+    }
+
     private fun appendOutput(state: DemoSessionViewState, chunk: OutputChunk) {
         state.renderedText = (state.renderedText + chunk.decodeForDemo())
             .takeLast(MAX_RENDER_CHARS)
@@ -324,7 +423,20 @@ class MainActivity : Activity() {
         if (status != null) {
             statusView.text = status
         }
+        sshConfigRow.visibility = if (activeState().termIdentity == TerminalIdentity.Ssh) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
         outputView.text = sessions[activeSessionIndex].renderedText
+    }
+
+    private fun sshHostText(): String {
+        return sshHostInput.text.toString().ifBlank { DEFAULT_SSH_HOST }
+    }
+
+    private fun sshPortText(): Int {
+        return sshPortInput.text.toString().toIntOrNull() ?: DEFAULT_SSH_PORT
     }
 
     private fun button(text: String, onClick: () -> Unit): Button {
@@ -352,6 +464,15 @@ class MainActivity : Activity() {
         return "${this::class.simpleName}(identity=${identity?.name ?: "NONE"}, message=${message ?: "no message"})"
     }
 
+    private fun SessionState.describeForDemo(): String {
+        return when (this) {
+            SessionState.Closed -> "Closed"
+            is SessionState.Failed -> "Failed(${failure.describeForDemo()})"
+            SessionState.Running -> "Running"
+            SessionState.Starting -> "Starting"
+        }
+    }
+
     private fun OutputChunk.decodeForDemo(): String {
         return bytes.toByteArray().decodeToString()
     }
@@ -359,7 +480,9 @@ class MainActivity : Activity() {
     private data class DemoSessionViewState(
         val label: String,
         val term: Term,
+        val termIdentity: TerminalIdentity,
         var renderJob: Job? = null,
+        var stateJob: Job? = null,
         var renderedText: String = "",
         val commandHistory: MutableList<String> = mutableListOf(),
         var historyCursor: Int? = null,
@@ -368,6 +491,8 @@ class MainActivity : Activity() {
     private companion object {
         private const val MAX_RENDER_CHARS = 12_000
         private const val MAX_COMMAND_HISTORY = 20
+        private const val DEFAULT_SSH_HOST = "127.0.0.1"
+        private const val DEFAULT_SSH_PORT = 2222
         private val HACKER_GREEN = Color.rgb(57, 255, 20)
     }
 }
