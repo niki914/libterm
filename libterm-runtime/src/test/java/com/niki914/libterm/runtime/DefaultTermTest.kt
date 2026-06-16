@@ -63,6 +63,7 @@ class DefaultTermTest {
         assertEquals("", success.value.stderr.toByteArray().decodeToString())
         assertEquals(7, success.value.exitCode)
         assertFalse(success.value.timedOut)
+        assertEquals(CommandTerminationReason.COMPLETED, success.value.terminationReason)
         assertTrue(lastWrite.get().contains("__libterm_exec_status=$?"))
         term.close()
     }
@@ -90,8 +91,36 @@ class DefaultTermTest {
         val success = assertIs<TermResult.Success<CommandResult>>(result)
         assertTrue(success.value.timedOut)
         assertNull(success.value.exitCode)
+        assertEquals(CommandTerminationReason.TIMED_OUT, success.value.terminationReason)
         assertEquals("partial-output", success.value.stdout.toByteArray().decodeToString())
         assertEquals("", success.value.stderr.toByteArray().decodeToString())
+        term.close()
+    }
+
+    @Test
+    fun `exec returns session terminated when shell exits before marker`() = runTest {
+        val backend = RecordingBackend(TerminalIdentity.User)
+        backend.onSend = {
+            backend.emitStdout("STDOUT_OK\n")
+            backend.emitStderr("STDERR_OK\n")
+            backend.completeExit()
+        }
+        val term = createTerm(backend)
+
+        val result = term.exec(
+            command = "echo STDOUT_OK\necho STDERR_OK 1>&2\nexit 7",
+            timeoutMillis = 5_000L,
+        )
+
+        val success = assertIs<TermResult.Success<CommandResult>>(result)
+        assertEquals("STDOUT_OK\n", success.value.stdout.toByteArray().decodeToString())
+        assertEquals("STDERR_OK\n", success.value.stderr.toByteArray().decodeToString())
+        assertNull(success.value.exitCode)
+        assertFalse(success.value.timedOut)
+        assertEquals(
+            CommandTerminationReason.SESSION_TERMINATED,
+            success.value.terminationReason,
+        )
         term.close()
     }
 
@@ -333,6 +362,20 @@ class DefaultTermTest {
                     timestampMillis = 100L,
                 ),
             )
+        }
+
+        fun emitStderr(text: String) {
+            outputEvents.tryEmit(
+                OutputChunk(
+                    stream = OutputStream.STDERR,
+                    bytes = TerminalBytes.of(text.encodeToByteArray()),
+                    timestampMillis = 100L,
+                ),
+            )
+        }
+
+        fun completeExit() {
+            exitResult.complete(null)
         }
     }
 }

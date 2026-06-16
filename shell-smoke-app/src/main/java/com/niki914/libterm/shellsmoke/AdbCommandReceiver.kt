@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.niki914.libterm.TerminalFailure
 import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.runtime.CommandTerminationReason
 import com.niki914.libterm.runtime.Term
 import com.niki914.libterm.runtime.TermResult
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +44,11 @@ class AdbCommandReceiver : BroadcastReceiver() {
             when (execResult) {
                 is TermResult.Success -> {
                     val value = execResult.value
-                    resultCode = value.exitCode ?: RESULT_TIMED_OUT
+                    resultCode = when (value.terminationReason) {
+                        CommandTerminationReason.COMPLETED -> value.exitCode ?: RESULT_EXEC_FAILURE
+                        CommandTerminationReason.TIMED_OUT -> RESULT_TIMED_OUT
+                        CommandTerminationReason.SESSION_TERMINATED -> RESULT_SESSION_TERMINATED
+                    }
                     resultData = JSONObject()
                         .put("ok", true)
                         .put("identity", identityName)
@@ -52,6 +57,7 @@ class AdbCommandReceiver : BroadcastReceiver() {
                         .put("stderr", value.stderr.toByteArray().decodeToString())
                         .put("exitCode", value.exitCode)
                         .put("timedOut", value.timedOut)
+                        .put("terminationReason", value.terminationReason.name)
                         .toString()
                 }
 
@@ -133,6 +139,7 @@ class AdbCommandReceiver : BroadcastReceiver() {
         private const val RESULT_INVALID_ARGUMENT = -3
         private const val RESULT_EXEC_FAILURE = -4
         private const val RESULT_INTERNAL_ERROR = -5
+        private const val RESULT_SESSION_TERMINATED = -6
 
         private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }

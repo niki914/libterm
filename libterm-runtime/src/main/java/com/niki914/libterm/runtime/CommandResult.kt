@@ -8,4 +8,5 @@ data class CommandResult(
     val stderr: TerminalBytes,
     val exitCode: Int?,
     val timedOut: Boolean,
+    val terminationReason: CommandTerminationReason = CommandTerminationReason.COMPLETED,
 )
