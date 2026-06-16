@@ -5,8 +5,8 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.jvm) apply false
 }
 
-val libtermGroup = "com.niki914"
-val libtermVersion = "0.0.1-SNAPSHOT"
+val libtermGroup = "com.github.niki914.libterm"
+val libtermVersion = "v3-0.3"
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)

@@ -40,7 +40,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.github.niki914.libterm:libterm-runtime:v2-0.2")
+    implementation("com.github.niki914.libterm:libterm-runtime:v3-0.3")
 }
 ```
 
