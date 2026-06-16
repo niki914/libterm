@@ -6,7 +6,7 @@ plugins {
 }
 
 val libtermGroup = "com.github.niki914.libterm"
-val libtermVersion = "v3-0.3"
+val libtermVersion = "v4-0.4"
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)

@@ -6,14 +6,10 @@
 
 # libterm
 
-一个面向 Android 的终端会话库，基于 libsu、Shizuku 与 SSH 后端提供 `USER`、`ROOT`、`SHIZUKU`、`SSH` 四类 shell 会话。
-当前推荐以 `LibTerm.runtime()` 管理多会话，以 `LibTerm.openUserTerm()` / `LibTerm.openSuTerm()` / `LibTerm.openShizukuTerm(context)` / `LibTerm.openSshTerm(...)` 创建单会话包装。
+一个面向 Android 的终端会话库，基于 libsu、Shizuku 与 SSH 后端，在统一的 Kotlin-first API 下提供 `USER`、`ROOT`、`SHIZUKU`、`SSH` 四类 shell 会话。
 
-## Demo
-
-本仓库包含一个可运行的 smoke demo：
-
-- [`shell-smoke-app`](./shell-smoke-app)
+- `LibTerm.openUserTerm()` / `openSuTerm()` / `openShizukuTerm(context)` / `openSshTerm(...)` —— 单会话包装，上手最快。
+- `LibTerm.runtime()` —— 多会话宿主，可同时管理多个 session。
 
 ## Features
 
@@ -24,67 +20,9 @@
 - 双模式交互：阻塞式 `exec` 与流式 `open + write + stream`
 - 统一失败模型：通过 `TerminalFailure` 表达参数错误、鉴权失败和启动失败
 
-## Installation
+## 快速开始
 
-### Gradle (JitPack)
-
-```kotlin
-dependencyResolutionManagement {
-    repositories {
-        maven("https://jitpack.io")
-        mavenCentral()
-        google()
-    }
-}
-```
-
-```kotlin
-dependencies {
-    implementation("com.github.niki914.libterm:libterm-runtime:v3-0.3")
-}
-```
-
-`libterm-runtime` 面向 Android 调用方暴露主要 API，并在内部组装 libsu、Shizuku 与 SSH 后端。
-
-## Runtime First API
-
-### 多会话：`LibTerm.runtime()`
-
-`LibTermRuntime` 是推荐的长期宿主，适合默认配置、多开和批量关闭。
-
-```kotlin
-import com.niki914.libterm.OpenResult
-import com.niki914.libterm.TerminalIdentity
-import com.niki914.libterm.runtime.LibTerm
-import kotlinx.coroutines.launch
-
-val runtime = LibTerm.runtime(
-    context = applicationContext,
-) {
-    defaultCwd = "/sdcard"
-}
-
-launch {
-    val user = runtime.open {
-        identity = TerminalIdentity.User
-    }
-
-    val root = runtime.open {
-        identity = TerminalIdentity.Su
-        cwd = "/data/local/tmp"
-    }
-
-    if (user is OpenResult.Success && root is OpenResult.Success) {
-        val sessions = runtime.listSessions()
-        println("opened sessions = ${sessions.map { it.id }}")
-        runtime.closeAll()
-    }
-}
-```
-
-### 单会话：`LibTerm.open*Term()`
-
-`openUserTerm`、`openSuTerm`、`openShizukuTerm`、`openSshTerm` 适合“拿一个交互式会话就用”的场景。
+最快的方式是使用单会话包装。每个 `open*Term` 辅助入口都返回懒打开的 `Term`；首次调用 `open()`、`exec()` 或 `write()` 时才会真正打开 shell。
 
 ```kotlin
 import com.niki914.libterm.runtime.LibTerm
@@ -129,7 +67,85 @@ launch {
 }
 ```
 
-## `cwd` 语义
+按需选择身份：
+
+```kotlin
+val user = LibTerm.openUserTerm(cwd = "/sdcard")
+val root = LibTerm.openSuTerm(cwd = "/data/local/tmp")
+val shizuku = LibTerm.openShizukuTerm(
+    context = applicationContext,
+    cwd = "/sdcard/Download",
+)
+val ssh = LibTerm.openSshTerm(
+    host = "192.168.1.10",
+    username = "shell",
+    password = "password",
+)
+```
+
+仓库内提供了一个可运行的 smoke demo：[`shell-smoke-app`](./shell-smoke-app)。
+
+## Installation
+
+### Gradle (JitPack)
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        maven("https://jitpack.io")
+        mavenCentral()
+        google()
+    }
+}
+```
+
+```kotlin
+dependencies {
+    implementation("com.github.niki914.libterm:libterm-runtime:v4-0.4")
+}
+```
+
+`libterm-runtime` 面向 Android 调用方暴露主要 API，并在内部组装 libsu、Shizuku 与 SSH 后端。
+
+## 高级 API
+
+### 多会话：`LibTerm.runtime()`
+
+`LibTermRuntime` 是推荐的长期宿主，适合默认配置、多开和批量关闭。
+
+```kotlin
+import com.niki914.libterm.OpenResult
+import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.runtime.LibTerm
+import kotlinx.coroutines.launch
+
+val runtime = LibTerm.runtime(
+    context = applicationContext,
+) {
+    defaultCwd = "/sdcard"
+}
+
+launch {
+    val user = runtime.open {
+        identity = TerminalIdentity.User
+    }
+
+    val root = runtime.open {
+        identity = TerminalIdentity.Su
+        cwd = "/data/local/tmp"
+    }
+
+    if (user is OpenResult.Success && root is OpenResult.Success) {
+        val sessions = runtime.listSessions()
+        println("opened sessions = ${sessions.map { it.id }}")
+        runtime.closeAll()
+    }
+}
+```
+
+需要显式管理多个 session 时使用 `LibTerm.runtime()`；否则上面的 `open*Term()` 辅助入口已经够用。
+
+### `cwd` 语义
 
 - `cwd` 表示会话打开时的初始工作目录，不是单次 `exec()` 的临时目录。
 - `exec()` 仍然复用当前 shell 会话，不会在每次执行前重置目录或环境变量。
@@ -152,7 +168,7 @@ val result = runtime.open {
 TerminalOpenOptions(cwd = "/sdcard/Download")
 ```
 
-## 身份与权限模式
+### 身份与权限模式
 
 身份映射：
 
@@ -172,27 +188,7 @@ val result = runtime.open {
 }
 ```
 
-## 单会话辅助入口
-
-每个辅助入口都返回懒打开的 `Term`；首次调用 `open()`、`exec()` 或 `write()` 时才会真正打开 shell。`openUserTerm`、`openSuTerm`、`openShizukuTerm` 接受可选 `cwd`，`openSshTerm` 接受 SSH 连接参数。
-
-```kotlin
-val user = LibTerm.openUserTerm(cwd = "/sdcard")
-val root = LibTerm.openSuTerm(cwd = "/data/local/tmp")
-val shizuku = LibTerm.openShizukuTerm(
-    context = applicationContext,
-    cwd = "/sdcard/Download",
-)
-val ssh = LibTerm.openSshTerm(
-    host = "192.168.1.10",
-    username = "shell",
-    password = "password",
-)
-```
-
-需要显式管理多个 session 时，使用 `LibTerm.runtime()`。
-
-## 低层 Core API
+### 低层 Core API
 
 如果你需要自己持有 registry 或直接测试 core 层，仍然可以使用 `TerminalManager`：
 
@@ -216,7 +212,7 @@ class TerminalManager {
 - 相对路径会返回 `TerminalFailure.InvalidOpenOptions`
 - 合法绝对路径会继续透传给具体 backend
 
-## 错误模型
+### 错误模型
 
 常见 `TerminalFailure` 类型：
 
@@ -230,7 +226,7 @@ class TerminalManager {
 | `RuntimeTerminated` | shell 运行中异常终止 |
 | `AlreadyClosed` | 会话或后端已关闭 |
 
-## 资源关闭
+### 资源关闭
 
 - `Term.close()`：关闭单会话包装
 - `LibTermSession.close()`：关闭某个已打开 session

@@ -7,13 +7,10 @@ English | **[中文](README_zh_CN.md)**
 # libterm
 
 An Android terminal session library built on top of libsu, Shizuku, and an SSH backend.
-The recommended public entry points are `LibTerm.runtime()` for multi-session hosts and `LibTerm.openUserTerm()` / `LibTerm.openSuTerm()` / `LibTerm.openShizukuTerm(context)` / `LibTerm.openSshTerm(...)` for single-session wrappers.
+It provides `USER`, `ROOT`, `SHIZUKU`, and `SSH` shell sessions behind a single Kotlin-first API.
 
-## Demo
-
-This repository contains a runnable smoke demo app:
-
-- [`shell-smoke-app`](./shell-smoke-app)
+- `LibTerm.openUserTerm()` / `openSuTerm()` / `openShizukuTerm(context)` / `openSshTerm(...)` — single-session wrappers, the fastest way to get started.
+- `LibTerm.runtime()` — multi-session host for managing several sessions at once.
 
 ## Features
 
@@ -24,67 +21,9 @@ This repository contains a runnable smoke demo app:
 - Dual interaction model: blocking `exec` and streaming `open + write + stream`
 - Structured failures through `TerminalFailure`
 
-## Installation
+## Quick Start
 
-### Gradle (JitPack)
-
-```kotlin
-dependencyResolutionManagement {
-    repositories {
-        maven("https://jitpack.io")
-        mavenCentral()
-        google()
-    }
-}
-```
-
-```kotlin
-dependencies {
-    implementation("com.github.niki914.libterm:libterm-runtime:v3-0.3")
-}
-```
-
-`libterm-runtime` exposes the main Android-facing API and wires libsu, Shizuku, and SSH backends internally.
-
-## Runtime First API
-
-### Multi-session: `LibTerm.runtime()`
-
-`LibTermRuntime` is the recommended long-lived host for defaults, multi-open, session listing, and batch shutdown.
-
-```kotlin
-import com.niki914.libterm.OpenResult
-import com.niki914.libterm.TerminalIdentity
-import com.niki914.libterm.runtime.LibTerm
-import kotlinx.coroutines.launch
-
-val runtime = LibTerm.runtime(
-    context = applicationContext,
-) {
-    defaultCwd = "/sdcard"
-}
-
-launch {
-    val user = runtime.open {
-        identity = TerminalIdentity.User
-    }
-
-    val root = runtime.open {
-        identity = TerminalIdentity.Su
-        cwd = "/data/local/tmp"
-    }
-
-    if (user is OpenResult.Success && root is OpenResult.Success) {
-        val sessions = runtime.listSessions()
-        println("opened sessions = ${sessions.map { it.id }}")
-        runtime.closeAll()
-    }
-}
-```
-
-### Single session: `LibTerm.open*Term()`
-
-Use `openUserTerm`, `openSuTerm`, `openShizukuTerm`, or `openSshTerm` when you only need one interactive session wrapper.
+The quickest path is a single-session wrapper. Each `open*Term` helper returns a lazy `Term`; the shell is opened on the first `open()`, `exec()`, or `write()` call.
 
 ```kotlin
 import com.niki914.libterm.runtime.LibTerm
@@ -129,7 +68,85 @@ launch {
 }
 ```
 
-## `cwd` Semantics
+Pick the identity you need:
+
+```kotlin
+val user = LibTerm.openUserTerm(cwd = "/sdcard")
+val root = LibTerm.openSuTerm(cwd = "/data/local/tmp")
+val shizuku = LibTerm.openShizukuTerm(
+    context = applicationContext,
+    cwd = "/sdcard/Download",
+)
+val ssh = LibTerm.openSshTerm(
+    host = "192.168.1.10",
+    username = "shell",
+    password = "password",
+)
+```
+
+A runnable smoke demo lives in [`shell-smoke-app`](./shell-smoke-app).
+
+## Installation
+
+### Gradle (JitPack)
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        maven("https://jitpack.io")
+        mavenCentral()
+        google()
+    }
+}
+```
+
+```kotlin
+dependencies {
+    implementation("com.github.niki914.libterm:libterm-runtime:v4-0.4")
+}
+```
+
+`libterm-runtime` exposes the main Android-facing API and wires libsu, Shizuku, and SSH backends internally.
+
+## Advanced API
+
+### Multi-session: `LibTerm.runtime()`
+
+`LibTermRuntime` is the recommended long-lived host for defaults, multi-open, session listing, and batch shutdown.
+
+```kotlin
+import com.niki914.libterm.OpenResult
+import com.niki914.libterm.TerminalIdentity
+import com.niki914.libterm.runtime.LibTerm
+import kotlinx.coroutines.launch
+
+val runtime = LibTerm.runtime(
+    context = applicationContext,
+) {
+    defaultCwd = "/sdcard"
+}
+
+launch {
+    val user = runtime.open {
+        identity = TerminalIdentity.User
+    }
+
+    val root = runtime.open {
+        identity = TerminalIdentity.Su
+        cwd = "/data/local/tmp"
+    }
+
+    if (user is OpenResult.Success && root is OpenResult.Success) {
+        val sessions = runtime.listSessions()
+        println("opened sessions = ${sessions.map { it.id }}")
+        runtime.closeAll()
+    }
+}
+```
+
+Use `LibTerm.runtime()` when you need to manage multiple sessions explicitly; otherwise the `open*Term()` helpers above are enough.
+
+### `cwd` Semantics
 
 - `cwd` is the initial working directory for opening a session, not a per-`exec()` override.
 - `exec()` still reuses the current shell session and does not reset working directory or environment.
@@ -152,7 +169,7 @@ At the core layer this maps to:
 TerminalOpenOptions(cwd = "/sdcard/Download")
 ```
 
-## Identities And Authorization
+### Identities And Authorization
 
 Identity mapping:
 
@@ -172,27 +189,7 @@ val result = runtime.open {
 }
 ```
 
-## Single-session Helpers
-
-Each helper returns a lazy `Term`; the shell is opened by the first `open()`, `exec()`, or `write()` call. `openUserTerm`, `openSuTerm`, and `openShizukuTerm` accept an optional `cwd`, while `openSshTerm` accepts SSH connection arguments.
-
-```kotlin
-val user = LibTerm.openUserTerm(cwd = "/sdcard")
-val root = LibTerm.openSuTerm(cwd = "/data/local/tmp")
-val shizuku = LibTerm.openShizukuTerm(
-    context = applicationContext,
-    cwd = "/sdcard/Download",
-)
-val ssh = LibTerm.openSshTerm(
-    host = "192.168.1.10",
-    username = "shell",
-    password = "password",
-)
-```
-
-Use `LibTerm.runtime()` when you need to manage multiple sessions explicitly.
-
-## Lower-level Core API
+### Lower-level Core API
 
 If you need direct registry control or want to test the core layer explicitly, `TerminalManager` is still available:
 
@@ -216,7 +213,7 @@ Rules for `openOptions.cwd`:
 - relative paths return `TerminalFailure.InvalidOpenOptions`
 - valid absolute paths continue down to the selected backend
 
-## Error Model
+### Error Model
 
 Common `TerminalFailure` types:
 
@@ -230,7 +227,7 @@ Common `TerminalFailure` types:
 | `RuntimeTerminated` | Shell terminated unexpectedly during runtime |
 | `AlreadyClosed` | Session or backend is already closed |
 
-## Closing Resources
+### Closing Resources
 
 - `Term.close()` closes the single-session wrapper
 - `LibTermSession.close()` closes one opened session
