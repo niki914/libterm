@@ -6,3 +6,6 @@
 -dontwarn org.slf4j.**
 -dontwarn org.newsclub.**
 -dontwarn javax.**
+-dontwarn com.sun.jna.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn org.ietf.jgss.**
